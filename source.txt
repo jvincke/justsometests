@@ -1,0 +1,4040 @@
+page 70107 ibsIncomingRecordFieldApi
+{
+    PageType = ListPart;
+    Caption = 'Company Synchronization IncomingRecord API';
+    PopulateAllFields = true;
+    ODataKeyFields = RecordID, FieldNo;
+    SourceTable = ibsIncomingRecord;
+    Extensible = false;
+    DelayedInsert = true;
+    layout
+    {
+        area(Content)
+        {
+            repeater(GroupName)
+            {
+                field(entryNo; Rec.EntryNo)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Entry No.';
+                    ToolTip = 'Entry No.';
+                }
+                field(recordId; Rec.RecordID)
+                {
+                    ApplicationArea = All;
+                    Caption = 'ID', Locked = true;
+                    ToolTip = 'ID', Locked = true;
+                }
+                field(fieldNo; Rec.FieldNo)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Field No.';
+                    ToolTip = 'Field No.';
+                }
+                field(value; Rec.Value)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Value';
+                    ToolTip = 'Value';
+                }
+                field(action; Rec.SyncAction)
+                {
+                    ApplicationArea = All;
+                    Caption = 'Action';
+                    ToolTip = 'Action';
+                }
+                field(executeOnValidate; Rec.ExecuteOnValidate)
+                {
+                    ApplicationArea = All;
+                    Caption = 'OnValidate', Locked = true;
+                    ToolTip = 'OnValidate', Locked = true;
+                }
+                field(executeOnInsert; Rec.ExecuteOnInsert)
+                {
+                    ApplicationArea = All;
+                    Caption = 'OnInsert', Locked = true;
+                    ToolTip = 'OnInsert', Locked = true;
+                }
+                field(executeOnModify; Rec.ExecuteOnModify)
+                {
+                    ApplicationArea = All;
+                    Caption = 'OnModify', Locked = true;
+                    ToolTip = 'OnModify', Locked = true;
+                }
+                field(executeOnDelete; Rec.ExecuteOnDelete)
+                {
+                    ApplicationArea = All;
+                    Caption = 'OnDelete', Locked = true;
+                    ToolTip = 'OnDelete', Locked = true;
+                }
+                field(otrSystemId; Rec.OtrSystemId)
+                {
+                    ApplicationArea = All;
+                    Caption = 'OtrSystemId', Locked = true;
+                    ToolTip = 'OtrSystemId', Locked = true;
+                }
+            }
+        }
+    }
+}
+page 70120 ibsIncomingTransactionApi
+{
+    PageType = API;
+    APIPublisher = 'ibs';
+    APIGroup = 'companysync';
+    APIVersion = 'v1.0', 'v2.0';
+    Caption = 'Company Synchronization IncomingRecord API';
+    EntityName = 'incomingTransaction';
+    EntitySetName = 'in';
+    ODataKeyFields = Id;
+    SourceTable = ibsIncomingTransaction;
+    Extensible = false;
+    DelayedInsert = true;
+    layout
+    {
+        area(Content)
+        {
+            repeater(GroupName)
+            {
+                field(id; Rec.Id) { }
+                field(source; Rec.Source) { }
+                part(incomingRecordFields; ibsIncomingRecordFieldApi)
+                {
+                    Caption = 'Incoming Record Fields';
+                    EntityName = 'incomingRecordField';
+                    EntitySetName = 'incomingRecordFields';
+                    SubPageLink = TransactionId = Field(Id);
+                }
+            }
+        }
+    }
+}
+page 70101 ibsOutgoingRecordApi
+{
+    PageType = API;
+    APIPublisher = 'ibs';
+    APIGroup = 'companysync';
+    APIVersion = 'v2.0', 'v1.0';
+    Caption = 'Company Synchronization OutgoingRecord API';
+    EntityName = 'outrecord';
+    EntitySetName = 'out';
+    ODataKeyFields = EntryNo;
+    SourceTable = ibsOutgoingRecord;
+    Extensible = false;
+    DelayedInsert = true;
+    layout
+    {
+        area(Content)
+        {
+            repeater(GroupName)
+            {
+                field(entryNo; Rec.EntryNo)
+                {
+                    Caption = 'Entry No.';
+                }
+                field(recordId; Rec.RecordID)
+                {
+                    Caption = 'ID';
+                }
+                field(fieldNo; Rec.FieldNo)
+                {
+                    Caption = 'Field No.';
+                }
+                field(value; Rec.Value)
+                {
+                    Caption = 'Value';
+                }
+                field(status; Rec.LastStatus)
+                {
+                    Caption = 'Status';
+                }
+                field(statusInfo; Rec.LastStatusInfo)
+                {
+                    Caption = 'Status Info';
+                }
+                field(otrSystemId; Rec.OtrSystemId)
+                {
+                    Caption = 'OtrSystemId', Locked = true;
+                }
+            }
+        }
+    }
+}
+codeunit 70111 ibsRecRefHelper
+{
+    [NonDebuggable]
+    procedure Assign(var RecordRef: RecordRef; FieldNo: Integer; Variant: Variant; Validate: Boolean)
+    begin
+        if Validate then
+            RecordRef.Field(FieldNo).Validate(GetTypeValue(RecordRef.Number, FieldNo, Variant))
+        else
+            RecordRef.Field(FieldNo).Value(GetTypeValue(RecordRef.Number, FieldNo, Variant));
+    end;
+    [NonDebuggable]
+    procedure Assign(FieldRef: FieldRef; Variant: Variant; Validate: Boolean)
+    begin
+        if Validate then
+            FieldRef.Validate(GetTypeValue(FieldRef.Record().Number, FieldRef.Number, Variant))
+        else
+            FieldRef.Value(GetTypeValue(FieldRef.Record().Number, FieldRef.Number, Variant));
+    end;
+    [NonDebuggable]
+    procedure GetFieldValueFromRecordID(RecordId: RecordId; Index: Integer): Text
+    var
+        Buffer: Text;
+    begin
+        Buffer := Format(RecordId);                         
+        Buffer := CopyStr(Buffer, StrPos(Buffer, ':') + 1); 
+        Buffer := SelectStr(Index, Buffer);                 
+        exit(Buffer);
+    end;
+    [NonDebuggable]
+    procedure IsInPrimaryKey(TableId: Integer; FieldNo: Integer): Boolean
+    var
+        RecordRef: RecordRef;
+        FieldRef: FieldRef;
+        KeyRef: KeyRef;
+        Index: Integer;
+    begin
+        RecordRef.Open(TableId);
+        KeyRef := RecordRef.KeyIndex(1);
+        for Index := 1 to KeyRef.FieldCount() do begin
+            FieldRef := KeyRef.FieldIndex(Index);
+            if FieldRef.Number = FieldNo then
+                exit(true);
+        end;
+        exit(false);
+    end;
+    [NonDebuggable]
+    procedure GetTypeValue(TableId: Integer; FieldNo: Integer; Value: Text): Variant
+    var
+        RecordRef: RecordRef;
+        FieldRef: FieldRef;
+        EvaluateDate: Date;
+        EvaluateDateTime: DateTime;
+        EvaluateTime: Time;
+        EvaluateInteger: Integer;
+        EvaluateText: Text;
+    begin
+        RecordRef.Open(TableId);
+        FieldRef := RecordRef.Field(FieldNo);
+        case FieldRef.Type() of
+            FieldType::BigInteger:
+                exit(Value);
+            FieldType::Blob:
+                exit(Value);
+            FieldType::Boolean:
+                begin
+                    Evaluate(EvaluateInteger, Value);
+                    exit(EvaluateInteger);
+                end;
+            FieldType::Code:
+                exit(Value);
+            FieldType::Date:
+                begin
+                    Evaluate(EvaluateDate, Value);
+                    exit(EvaluateDate);
+                end;
+            FieldType::DateFormula:
+                exit(Value);
+            FieldType::DateTime:
+                begin
+                    Evaluate(EvaluateDateTime, Value);
+                    exit(EvaluateDateTime);
+                end;
+            FieldType::Decimal:
+                //exit(Value);
+                begin
+                    Evaluate(EvaluateText, Value, 9);
+                    exit(ConvertTextToDecimal(EvaluateText));
+                end;
+            FieldType::Duration:
+                exit(Value);
+            FieldType::Guid:
+                exit(Value);
+            FieldType::Integer:
+                exit(Value);
+            FieldType::Media:
+                exit(Value);
+            FieldType::MediaSet:
+                exit(Value);
+            FieldType::Option:
+                exit(GetOptionNo(Value, FieldRef));
+            FieldType::RecordId:
+                exit(Value);
+            FieldType::TableFilter:
+                exit(Value);
+            FieldType::Text:
+                exit(Value);
+            FieldType::Time:
+                begin
+                    Evaluate(EvaluateTime, Value);
+                    exit(EvaluateTime);
+                end;
+            else
+                exit(Value);
+        end;
+    end;
+    [NonDebuggable]
+    procedure GetOptionNo(Value: Text; FieldRef: FieldRef): Integer
+    var
+        Integer: Integer;
+    begin
+        if (Value = '') and (FieldRef.GetEnumValueName(1) = ' ') then
+            exit(0);
+        if Evaluate(FieldRef, Value) then
+            Integer := FieldRef.Value();
+        exit(Integer);
+    end;
+    local procedure ConvertTextToDecimal(DecimalText: Text): Decimal;
+    var
+        CurrDecimal: Decimal;
+    begin
+        if DecimalText = '' then
+            exit(0);
+        Evaluate(CurrDecimal, FormatDecimal(DecimalText));
+        exit(CurrDecimal);
+    end;
+    local procedure FormatDecimal(DecimalText: Text): Text;
+    var
+        DefaultDecimalSeparator: Text[2];
+    begin
+        DefaultDecimalSeparator := CopyStr(Format(1 / 2), 2, 1);
+        case DefaultDecimalSeparator of
+            '.':
+                exit(ConvertStr(DecimalText, ',', '.'));
+            ',':
+                exit(ConvertStr(DecimalText, '.', ','));
+            else
+                exit(DecimalText);
+        end;
+    end;
+}
+codeunit 70104 ibsSyncIncomingRecord
+{
+    var
+        LastInsertRecordId: RecordId;
+        LastInsertStatus: Enum ibsSyncStatus;
+        LastInsertStatusInfo: Text[2048];
+    trigger OnRun()
+    begin
+        ProcessIncomingRecords();
+        DebugUpdateTransactionStatus();
+    end;
+    [NonDebuggable]
+    local procedure DebugUpdateTransactionStatus()
+    var
+        IncomingTransaction: Record ibsIncomingTransaction;
+        IncomingRecord: Record ibsIncomingRecord;
+        Flag: Boolean;
+    begin
+        if not IncomingTransaction.FindSet(true, false) then
+            exit;
+        Flag := true;
+        repeat
+            IncomingRecord.SetRange(TransactionId, IncomingTransaction.Id);
+            if IncomingRecord.FindSet(false, false) then
+                repeat
+                    if Flag then
+                        Flag := IncomingRecord.Status = ibsSyncStatus::Completed
+                    else
+                        break;
+                until IncomingRecord.Next(1) = 0;
+            if Flag then
+                IncomingTransaction.Status := ibsSyncStatus::Completed
+            else
+                IncomingTransaction.Status := IncomingRecord.Status;
+            IncomingTransaction.Modify(false);
+        until IncomingTransaction.Next(1) = 0;
+    end;
+    [NonDebuggable]
+    procedure ProcessIncomingRecord(var IncomingRecord: Record ibsIncomingRecord)
+    begin
+        IncomingRecord.SetLoadFields(Status, RecordId, FieldNo, Value, SyncAction);
+        IncomingRecord.LockTable();
+        IncomingRecord.ModifyAll(Status, ibsSyncStatus::Processing, false);
+        Process(IncomingRecord);
+    end;
+    [NonDebuggable]
+    local procedure SetStatusProcessing(): Boolean
+    var
+        IncomingTransaction: Record ibsIncomingTransaction;
+        IncomingRecord: Record ibsIncomingRecord;
+    begin
+        IncomingTransaction.SetLoadFields(Status);
+        IncomingTransaction.LockTable();
+        IncomingTransaction.SetRange(Status, ibsSyncStatus::Recorded);
+        if IncomingTransaction.IsEmpty() then
+            exit(false);
+        IncomingRecord.SetLoadFields(Status);
+        IncomingRecord.LockTable();
+        IncomingRecord.SetRange(Status, ibsSyncStatus::Recorded);
+        if IncomingRecord.IsEmpty() then
+            exit(false);
+        IncomingTransaction.ModifyAll(Status, ibsSyncStatus::Processing, false);
+        IncomingRecord.ModifyAll(Status, ibsSyncStatus::Processing, false);
+        Commit();
+        exit(true);
+    end;
+    [NonDebuggable]
+    local procedure ProcessIncomingRecords()
+    var
+        IncomingTransaction: Record ibsIncomingTransaction;
+        IncomingRecord: Record ibsIncomingRecord;
+    begin
+        if not SetStatusProcessing() then
+            exit;
+        IncomingTransaction.SetLoadFields(Status);
+        IncomingTransaction.SetRange(Status, ibsSyncStatus::Processing);
+        if not IncomingTransaction.FindSet(true, false) then
+            exit;
+        IncomingRecord.SetRange(Status, ibsSyncStatus::Processing);
+        IncomingRecord.FindSet(true, false);
+        repeat
+            Process(IncomingRecord);
+        until IncomingRecord.Next(1) = 0;
+        repeat
+            UpdateTransactionStatus(IncomingTransaction);
+        until IncomingTransaction.Next(1) = 0;
+    end;
+    [NonDebuggable]
+    local procedure UpdateTransactionStatus(var IncomingTransaction: Record ibsIncomingTransaction)
+    var
+        IncomingRecord: Record ibsIncomingRecord;
+        //TODO: May add Status related FlowFields to Transaction
+        Flag: Boolean;
+    begin
+        Flag := true;
+        IncomingRecord.SetLoadFields(Status);
+        IncomingRecord.SetRange(TransactionId, IncomingTransaction.Id);
+        repeat
+            if Flag then
+                Flag := IncomingRecord.Status = ibsSyncStatus::Completed
+            else
+                break;
+        until IncomingRecord.Next(1) = 0;
+        if Flag then
+            IncomingTransaction.Status := ibsSyncStatus::Completed
+        else
+            IncomingTransaction.Status := IncomingRecord.Status;
+        IncomingTransaction.Modify(false);
+    end;
+    [NonDebuggable]
+    local procedure Process(var IncomingRecord: Record ibsIncomingRecord)
+    var
+        TryRecRefValidateAndModify: Codeunit ibsTryRecRefValidateAndModify;
+        TryRecRefInsert: Codeunit ibsTryRecRefInsert;
+        TryRecRefRename: Codeunit ibsTryRecRefRename;
+        TryRecRefDelete: Codeunit ibsTryRecRefDelete;
+    begin
+        Commit();
+        case IncomingRecord.SyncAction of
+            ibsSyncAction::INSERT:
+                if (IncomingRecord.RecordID <> LastInsertRecordId) then begin
+                    if TryRecRefInsert.Run(IncomingRecord) then
+                        Complete(IncomingRecord)
+                    else
+                        Fail(IncomingRecord);
+                    LastInsertRecordId := IncomingRecord.RecordID;
+                    LastInsertStatus := IncomingRecord.Status;
+                    LastInsertStatusInfo := IncomingRecord.StatusInfo;
+                end else begin
+                    IncomingRecord.Status := LastInsertStatus;
+                    IncomingRecord.StatusInfo := LastInsertStatusInfo;
+                    IncomingRecord.Modify(false);
+                    UpdateRemoteStatus(IncomingRecord);
+                end;
+            ibsSyncAction::MODIFY:
+                if TryRecRefValidateAndModify.Run(IncomingRecord) then
+                    Complete(IncomingRecord)
+                else
+                    Fail(IncomingRecord);
+            ibsSyncAction::RENAME:
+                if TryRecRefRename.Run(IncomingRecord) then
+                    Complete(IncomingRecord)
+                else
+                    Fail(IncomingRecord);
+            ibsSyncAction::DELETE:
+                if TryRecRefDelete.Run(IncomingRecord) then
+                    Complete(IncomingRecord)
+                else
+                    Fail(IncomingRecord);
+        end;
+    end;
+    [NonDebuggable]
+    local procedure Complete(var IncomingRecord: Record ibsIncomingRecord)
+    begin
+        IncomingRecord.Status := ibsSyncStatus::Completed;
+        IncomingRecord.Modify(false);
+        UpdateRemoteStatus(IncomingRecord);
+    end;
+    [NonDebuggable]
+    local procedure Fail(var IncomingRecord: Record ibsIncomingRecord)
+    begin
+        Fail(IncomingRecord, CopyStr(System.GetLastErrorCode() + ': ' + System.GetLastErrorText(), 1, 2048));
+    end;
+    [NonDebuggable]
+    local procedure Fail(var IncomingRecord: Record ibsIncomingRecord; StatusInfo: Text[2048])
+    begin
+        IncomingRecord.Status := ibsSyncStatus::Error;
+        IncomingRecord.StatusInfo := StatusInfo;
+        IncomingRecord.Modify(false);
+        UpdateRemoteStatus(IncomingRecord);
+    end;
+    [NonDebuggable]
+    local procedure UpdateRemoteStatus(var IncomingRecord: Record ibsIncomingRecord)
+    var
+        SyncTargetCompany: Record ibsSyncTargetCompany;
+        IncomingTransaction: Record ibsIncomingTransaction;
+        SourceTok: Label '%1/api/ibs/companysync/v2.0/companies(%2)/out(entryNo=%3)', Locked = true;
+        SourceBaseURL: Text;
+        SourceCompanyId: Text;
+        CompiledSourceApiUrl: Text;
+        OdataTok: Label '{"status": "%1","statusInfo":"%2","otrSystemId":"%3"}', Locked = true;
+        OdataMessage: Text;
+    begin
+        IncomingTransaction.Get(IncomingRecord.TransactionId);
+        //IncomingTransaction.Source := 'https://api.businesscentral.dynamics.com/v2.0/cloudservice.solutions/TempSB,08597f49-15ab-ec11-bb93-000d3a257a9b'; //TODO: the obvious
+        SourceBaseURL := SelectStr(1, IncomingTransaction.Source);
+        if SourceBaseURL[StrLen(SourceBaseURL)] = '/' then
+            SourceBaseURL := CopyStr(SourceBaseURL, 1, StrLen(SourceBaseURL) - 1);
+        SourceCompanyId := SelectStr(2, IncomingTransaction.Source);
+        CompiledSourceApiUrl := StrSubstNo(SourceTok, SourceBaseURL, SourceCompanyId, IncomingRecord.EntryNo);
+        OdataMessage := StrSubstNo(OdataTok, IncomingRecord.Status, IncomingRecord.StatusInfo, IncomingRecord.OtrSystemId);
+        SyncTargetCompany.SetRange(BaseUrl, SourceBaseURL);
+        SyncTargetCompany.FindFirst();
+        SendAndLog(IncomingRecord, OdataMessage, CompiledSourceApiUrl, SyncTargetCompany.BasicAccessAuthentication());
+    end;
+    [NonDebuggable]
+    local procedure SendAndLog(var IncomingRecord: Record ibsIncomingRecord; Data: Text; ApiUrl: Text; ApiAuth: Text)
+    var
+        HttpClient: HttpClient;
+        HttpContent: HttpContent;
+        HttpResponseMessage: HttpResponseMessage;
+        HttpStatusMsg: Label '%1: %2', Locked = true;
+    begin
+        HttpClient.DefaultRequestHeaders().Add('Authorization', ApiAuth); //TODO: the obvious
+        HttpClient.DefaultRequestHeaders().Add('If-Match', '*'); 
+        HttpContent.WriteFrom(Data);
+        SetHttpContentHeaders(HttpContent);
+        HttpClient.Send(HttpRequestMessage(HttpContent, ApiUrl), HttpResponseMessage);
+        if HttpResponseMessage.IsBlockedByEnvironment then
+            LogMessage('SendFeedback()', 'IsBlockedByEnvironment', Verbosity::Error, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, 'SyncTransactionGuid', IncomingRecord.TransactionId)
+        else
+            if not HttpResponseMessage.IsSuccessStatusCode then
+                LogMessage('SendFeedback()', StrSubstNo(HttpStatusMsg, HttpResponseMessage.HttpStatusCode, HttpResponseMessage.ReasonPhrase), Verbosity::Error, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, 'SyncTransactionGuid', IncomingRecord.TransactionId)
+            else
+                LogMessage('SendFeedback()', StrSubstNo(HttpStatusMsg, HttpResponseMessage.HttpStatusCode, HttpResponseMessage.ReasonPhrase), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, 'SyncTransactionGuid', IncomingRecord.TransactionId);
+    end;
+    [NonDebuggable]
+    local procedure SetHttpContentHeaders(var HttpContent: HttpContent)
+    var
+        HttpHeaders: HttpHeaders;
+    begin
+        HttpContent.GetHeaders(HttpHeaders);
+        HttpHeaders.Remove('Content-Type');
+        HttpHeaders.Add('Content-Type', 'application/json');
+    end;
+    [NonDebuggable]
+    local procedure HttpRequestMessage(var HttpContent: HttpContent; RequestUri: Text) HttpRequestMessage: HttpRequestMessage
+    begin
+        HttpRequestMessage.Content := HttpContent;
+        HttpRequestMessage.Method('PATCH');
+        HttpRequestMessage.SetRequestUri(RequestUri);
+    end;
+    [NonDebuggable]
+    procedure DebugResetStatus(TransactionId: Guid; StatusFilter: Enum ibsSyncStatus)
+    var
+        IncomingRecord: Record ibsIncomingRecord;
+    begin
+        IncomingRecord.SetLoadFields(Status, StatusInfo);
+        IncomingRecord.LockTable();
+        IncomingRecord.SetRange(TransactionId, TransactionId);
+        case StatusFilter of
+            ibsSyncStatus::Error:
+                begin
+                    IncomingRecord.SetRange(Status, ibsSyncStatus::Error);
+                    if IncomingRecord.FindSet(true, false) then begin
+                        IncomingRecord.ModifyAll(StatusInfo, '');
+                        IncomingRecord.ModifyAll(Status, ibsSyncStatus::Recorded, false);
+                        Commit();
+                    end;
+                end;
+            ibsSyncStatus::Processing:
+                begin
+                    IncomingRecord.SetRange(Status, ibsSyncStatus::Processing);
+                    if IncomingRecord.FindSet(true, false) then begin
+                        IncomingRecord.ModifyAll(StatusInfo, '');
+                        IncomingRecord.ModifyAll(Status, ibsSyncStatus::Recorded, false);
+                        Commit();
+                    end;
+                end;
+            ibsSyncStatus::Completed:
+                begin
+                    IncomingRecord.SetRange(Status, ibsSyncStatus::Completed);
+                    if IncomingRecord.FindSet(true, false) then begin
+                        IncomingRecord.ModifyAll(StatusInfo, '');
+                        IncomingRecord.ModifyAll(Status, ibsSyncStatus::Recorded, false);
+                        Commit();
+                    end;
+                end;
+        end;
+    end;
+}
+codeunit 70110 ibsTryRecRefDelete
+{
+    TableNo = ibsIncomingRecord;
+    trigger OnRun()
+    var
+        RecordRef: RecordRef;
+    begin
+        RecordRef.Open(Rec."RecordID".TableNo);
+        RecordRef.Get(Rec.RecordID);
+        RecordRef.Delete(Rec.ExecuteOnDelete);
+    end;
+}
+codeunit 70108 ibsTryRecRefInsert
+{
+    TableNo = ibsIncomingRecord;
+    var
+        RecRefHelper: Codeunit ibsRecRefHelper;
+    trigger OnRun()
+    var
+        RecordRef: RecordRef;
+    begin
+        RecordRef.Open(Rec."RecordID".TableNo);
+        RecordRef.Init();
+        AddPrimaryKey(RecordRef, Rec);
+        AddFields(RecordRef, Rec);
+        RecordRef.Insert(Rec.ExecuteOnInsert);
+        Commit();
+    end;
+    [NonDebuggable]
+    local procedure AddPrimaryKey(var RecordRef: RecordRef; var IncomingRecord: Record ibsIncomingRecord)
+    var
+        FieldRef: FieldRef;
+        KeyRef: KeyRef;
+        Index: Integer;
+    begin
+        KeyRef := RecordRef.KeyIndex(1);
+        for Index := 1 to KeyRef.FieldCount() do begin
+            FieldRef := KeyRef.FieldIndex(Index);
+            RecRefHelper.Assign(FieldRef, RecRefHelper.GetFieldValueFromRecordID(IncomingRecord.RecordID, Index), IncomingRecord.ExecuteOnValidate);
+        end;
+    end;
+    [NonDebuggable]
+    local procedure AddFields(var RecordRef: RecordRef; IncomingRecord: Record ibsIncomingRecord)
+    var
+        TempIncomingRecord: Record ibsIncomingRecord temporary;
+    begin
+        IncomingRecord.SetRange(TransactionId, IncomingRecord.TransactionId);
+        IncomingRecord.SetRange(RecordID, IncomingRecord.RecordID);
+        IncomingRecord.SetRange(Status, IncomingRecord.Status);
+        if IncomingRecord.FindSet(false, false) then
+            repeat
+                if not RecRefHelper.IsInPrimaryKey(IncomingRecord.RecordID.TableNo, IncomingRecord.FieldNo) then begin
+                    TempIncomingRecord.Init();
+                    TempIncomingRecord.TransferFields(IncomingRecord);
+                    TempIncomingRecord.Insert(false);
+                end;
+            until IncomingRecord.Next(1) = 0;
+        if TempIncomingRecord.FindSet(false, false) then
+            repeat
+                RecRefHelper.Assign(RecordRef, TempIncomingRecord.FieldNo, TempIncomingRecord.Value, TempIncomingRecord.ExecuteOnValidate);
+            until TempIncomingRecord.Next(1) = 0;
+    end;
+}
+codeunit 70109 ibsTryRecRefRename
+{
+    TableNo = ibsIncomingRecord;
+    trigger OnRun()
+    var
+        RecordRef: RecordRef;
+    begin
+        RecordRef.Open(Rec."RecordID".TableNo);
+        RecordRef.Get(Rec.RecordID);
+        RecordRef.Rename(Rec.Value);
+    end;
+}
+codeunit 70106 ibsTryRecRefValidateAndModify
+{
+    TableNo = ibsIncomingRecord;
+    trigger OnRun()
+    var
+        RecRefHelper: Codeunit ibsRecRefHelper;
+        RecordRef: RecordRef;
+    begin
+        RecordRef.Open(Rec."RecordID".TableNo);
+        RecordRef.Get(Rec.RecordID);
+        RecRefHelper.Assign(RecordRef, Rec.FieldNo, Rec.Value, Rec.ExecuteOnValidate);
+        RecordRef.Modify(Rec.ExecuteOnModify);
+        Commit();
+    end;
+}
+codeunit 70107 ibsDataTransformation
+{
+    [NonDebuggable]
+    procedure ApplyDataTransformation(TargetCompanyCode: Code[50]; var TempOutgoingRecord: Record ibsOutgoingRecord temporary)
+    var
+        DataTransformationRule: Record ibsDataTransformationRule;
+        CurrRuleCode: Code[20];
+    begin
+        CurrRuleCode := GetTransformationRule(TargetCompanyCode, TempOutgoingRecord);
+        if CurrRuleCode = '' then
+            exit;
+        DataTransformationRule.Get(CurrRuleCode);
+        case DataTransformationRule.Type of
+            ibsDataTransformationType::Calculate:
+                ApplyCalculateTransformation(TempOutgoingRecord.Value, DataTransformationRule.Value);
+            ibsDataTransformationType::Convert:
+                ApplyConvertTransformation(TempOutgoingRecord.Value, DataTransformationRule.Value);
+            ibsDataTransformationType::Replace:
+                ApplyReplaceTransformation(TempOutgoingRecord.Value, CurrRuleCode);
+        end;
+    end;
+    [NonDebuggable]
+    local procedure GetTransformationRule(TargetCompanyCode: Code[50]; var TempOutgoingRecord: Record ibsOutgoingRecord temporary): Code[20]
+    var
+        TargetCompanyDataTransform: Record ibsTargetCompanyDataTransform;
+        SyncField: Record ibsSyncField;
+    begin
+        if TargetCompanyDataTransform.Get(TempOutgoingRecord.TableID, TempOutgoingRecord.FieldNo, TargetCompanyCode) then
+            exit(TargetCompanyDataTransform.DataTransformationRuleCode);
+        SyncField.SetRange(TableID, TempOutgoingRecord.TableID);
+        SyncField.SetRange(FieldNo, TempOutgoingRecord.FieldNo);
+        if SyncField.FindFirst() then
+            exit(SyncField.GlobalDataTransformRuleCode);
+    end;
+    [NonDebuggable]
+    local procedure ApplyCalculateTransformation(var DataValue: Text[2048]; ActionValue: Text[100])
+    var
+        ActionChar: Char;
+        ActionDecimal: Decimal;
+        DataDecimal: Decimal;
+    begin
+        ActionChar := ActionValue[1];
+        Evaluate(ActionDecimal, CopyStr(ActionValue, 2));
+        Evaluate(DataDecimal, DataValue);
+        case ActionChar of
+            '+':
+                Evaluate(DataValue, Format(DataDecimal + ActionDecimal));
+            '-':
+                Evaluate(DataValue, Format(DataDecimal - ActionDecimal));
+            '*':
+                Evaluate(DataValue, Format(DataDecimal * ActionDecimal));
+            '/':
+                Evaluate(DataValue, Format(DataDecimal / ActionDecimal));
+        end;
+    end;
+    [NonDebuggable]
+    local procedure ApplyConvertTransformation(var DataValue: Text[2048]; ActionValue: Text[100])
+    var
+        FromCharacters: Text;
+        ToCharacters: Text;
+        CenterCharacterPosition: Integer;
+    begin
+        CenterCharacterPosition := (StrLen(ActionValue) - 1) / 2 + 1; 
+        FromCharacters := CopyStr(ActionValue, 1, CenterCharacterPosition - 1);
+        ToCharacters := CopyStr(ActionValue, CenterCharacterPosition + 1);
+        DataValue := ConvertStr(DataValue, FromCharacters, ToCharacters);
+    end;
+    [NonDebuggable]
+    local procedure ApplyReplaceTransformation(var DataValue: Text[2048]; CurrRuleCode: Code[20])
+    var
+        DataTransformReplaceRules: Record ibsDataTransformReplaceRules;
+    begin
+        if not DataTransformReplaceRules.Get(CurrRuleCode, DataValue) then
+            exit;
+        DataValue := DataTransformReplaceRules.ToValue;
+    end;
+}
+query 70100 ibsProcessingFields
+{
+    DataAccessIntent = ReadOnly;
+    QueryCategory = 'OutgoingRecords';
+    QueryType = Normal;
+    elements
+    {
+        dataitem(SyncSet; ibsSyncSet)
+        {
+            DataItemTableFilter = Active = const(true);
+            column(SyncSetCode; Code) { }
+            dataitem(SyncSetField; ibsSyncSetField)
+            {
+                DataItemLink = SyncSetCode = SyncSet.Code;
+                SqlJoinType = InnerJoin;
+                column(SyncSetFieldEntryNo; SyncFieldEntryNo) { }
+                dataitem(SyncField; ibsSyncField)
+                {
+                    DataItemLink = EntryNo = SyncSetField.SyncFieldEntryNo;
+                    SqlJoinType = InnerJoin;
+                    column(TableID; TableID) { }
+                    column(FieldNo; FieldNo) { }
+                    dataitem(OutgoingRecord; ibsOutgoingRecord)
+                    {
+                        DataItemLink = TableID = SyncField.TableID, FieldNo = SyncField.FieldNo;
+                        DataItemTableFilter = LastStatus = const(Processing); 
+                        SqlJoinType = InnerJoin;
+                        column(Count)
+                        {
+                            Method = Count;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+codeunit 70100 ibsSyncEventHandler
+{
+    SingleInstance = true;
+    Permissions = tabledata ibsOutgoingRecord = RI;
+    [NonDebuggable]
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Global Triggers", 'GetDatabaseTableTriggerSetup', '', false, false)]
+    local procedure GetDatabaseTableTriggerSetup(TableId: Integer; var OnDatabaseInsert: Boolean; var OnDatabaseModify: Boolean; var OnDatabaseDelete: Boolean; var OnDatabaseRename: Boolean)
+    begin
+        if IsExcludedTable(TableId) or not CheckLicense(TableId) then
+            exit;
+        OnDatabaseInsert := true;
+        OnDatabaseModify := true;
+        OnDatabaseDelete := true;
+        OnDatabaseRename := true;
+    end;
+    [NonDebuggable]
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Global Triggers", 'OnDatabaseInsert', '', false, false)]
+    local procedure OnDatabaseInsert(RecRef: RecordRef)
+    begin
+        if IsExcludedTable(RecRef.Number) or not CheckLicense(RecRef.Number) then
+            exit;
+        HandleDatabaseInsert(RecRef);
+    end;
+    [NonDebuggable]
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Global Triggers", 'OnDatabaseModify', '', false, false)]
+    local procedure OnDatabaseModify(RecRef: RecordRef)
+    begin
+        if IsExcludedTable(RecRef.Number) or not CheckLicense(RecRef.Number) then
+            exit;
+        HandleDatabaseModify(RecRef);
+    end;
+    [NonDebuggable]
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Global Triggers", 'OnDatabaseDelete', '', false, false)]
+    local procedure OnDatabaseDelete(RecRef: RecordRef)
+    begin
+        if IsExcludedTable(RecRef.Number) or not CheckLicense(RecRef.Number) then
+            exit;
+        HandleDatabaseDelete(RecRef);
+    end;
+    [NonDebuggable]
+    [EventSubscriber(ObjectType::Codeunit, Codeunit::"Global Triggers", 'OnDatabaseRename', '', false, false)]
+    local procedure OnDatabaseRename(RecRef: RecordRef)
+    begin
+        if IsExcludedTable(RecRef.Number) or not CheckLicense(RecRef.Number) then
+            exit;
+        HandleDatabaseRename(RecRef);
+    end;
+    [NonDebuggable]
+    local procedure HandleDatabaseInsert(var RecordRef: RecordRef)
+    begin
+        Log(RecordRef, ibsSyncAction::INSERT);
+    end;
+    [NonDebuggable]
+    local procedure HandleDatabaseModify(var RecordRef: RecordRef)
+    begin
+        Log(RecordRef, ibsSyncAction::MODIFY);
+    end;
+    [NonDebuggable]
+    local procedure HandleDatabaseDelete(var RecordRef: RecordRef)
+    begin
+        Log(RecordRef, ibsSyncAction::DELETE);
+    end;
+    [NonDebuggable]
+    local procedure HandleDatabaseRename(var RecordRef: RecordRef)
+    begin
+        Log(RecordRef, ibsSyncAction::RENAME);
+    end;
+    [NonDebuggable]
+    procedure IsExcludedTable(TableId: Integer): Boolean
+    begin
+        if TableId >= 2000000000 then
+            exit(true);
+        case TableId of
+            Database::"Change Log Entry",
+            Database::ibsOutgoingRecord,
+            Database::ibsIncomingRecord,
+            9008, //Database::"User Login"=9008
+            Database::"Scheduled Task",
+            Database::"Page Usage State",
+            Database::"Cont. Duplicate Search String",
+            Database::"User Property": 
+                exit(true);
+        end;
+        exit(false);
+    end;
+    [NonDebuggable]
+    local procedure Log(var RecordRef: RecordRef; SyncAction: enum ibsSyncAction)
+    begin
+        if SyncAction = SyncAction::INSERT then
+            LogInsert(RecordRef, SyncAction)
+        else
+            LogModification(RecordRef, SyncAction);
+    end;
+    [NonDebuggable]
+    local procedure LogModification(var RecordRef: RecordRef; SyncAction: enum ibsSyncAction)
+    var
+        xRecordRef: RecordRef;
+        FieldRef: FieldRef;
+        xFieldRef: FieldRef;
+        i: Integer;
+    begin
+        if RecordRef.IsTemporary then
+            exit;
+        xRecordRef.Open(RecordRef.Number, false, RecordRef.CurrentCompany());
+        xRecordRef."SecurityFiltering" := SECURITYFILTER::Filtered;
+        if xRecordRef.ReadPermission then
+            if not xRecordRef.Get(RecordRef.RecordId) then
+                exit;
+        for i := 1 to RecordRef.FieldCount do begin
+            FieldRef := RecordRef.FieldIndex(i);
+            xFieldRef := xRecordRef.FieldIndex(i);
+            if IsNormalField(FieldRef) then
+                if Format(FieldRef.Value) <> Format(xFieldRef.Value) then
+                    if IsSyncActive(RecordRef.Number, FieldRef.Number) then
+                        InsertOutgoingRecord(RecordRef, FieldRef, SyncAction);
+        end;
+    end;
+    [NonDebuggable]
+    local procedure LogInsert(var RecordRef: RecordRef; SyncAction: enum ibsSyncAction)
+    var
+        FieldRef: FieldRef;
+        i: Integer;
+    begin
+        if RecordRef.IsTemporary then
+            exit;
+        for i := 1 to RecordRef.FieldCount do begin
+            FieldRef := RecordRef.FieldIndex(i);
+            if IsNormalField(FieldRef) then
+                if IsSyncActive(RecordRef.Number, FieldRef.Number) then
+                    InsertOutgoingRecord(RecordRef, FieldRef, SyncAction);
+        end;
+    end;
+    [NonDebuggable]
+    procedure IsNormalField(FieldRef: FieldRef): Boolean
+    begin
+        exit(FieldRef.Class = FieldClass::Normal)
+    end;
+    [NonDebuggable]
+    procedure IsSyncActive(TableId: Integer; FieldId: Integer): Boolean
+    begin
+        exit(SyncPerformanceInstance.IsSyncActive(TableId, FieldId));
+    end;
+    [NonDebuggable]
+    local procedure InsertOutgoingRecord(var RecordRef: RecordRef; FieldRef: FieldRef; SyncAction: enum ibsSyncAction)
+    var
+        OutgoingRecord: Record ibsOutgoingRecord;
+        TypeHelper: Codeunit "Type Helper";
+        TestBoolean: Boolean;
+    begin
+        //Message('InsertSyncEntry %1 (%2) "%3": %4', SyncAction, RecordRef.RecordId(), FieldRef.Name, FieldRef.Value);
+        OutgoingRecord.Init();
+        OutgoingRecord.RecordID := RecordRef.RecordId();
+        OutgoingRecord.TableID := OutgoingRecord.RecordID.TableNo();
+        OutgoingRecord.FieldNo := FieldRef.Number();
+        case FieldRef.Type of
+            FieldType::Boolean:
+                if Evaluate(TestBoolean, Format(FieldRef.Value)) then
+                    if TestBoolean then
+                        OutgoingRecord.Value := '1'
+                    else
+                        OutgoingRecord.Value := '0';
+            FieldType::Option:
+                OutgoingRecord.Value := Format(RecRefHelper.GetOptionNo(Format(FieldRef.Value(), 0, 9), FieldRef));
+            else
+                OutgoingRecord.Value := Format(FieldRef.Value(), 0, 9);
+        end;
+        OutgoingRecord.SyncAction := SyncAction;
+        OutgoingRecord.LanguageID := GlobalLanguage();
+        OutgoingRecord.CultureName := CopyStr(TypeHelper.GetCultureName(), 1, MaxStrLen(OutgoingRecord.CultureName));
+        OutgoingRecord.Insert(true);
+    end;
+    [NonDebuggable]
+    procedure CheckLicense(TableId: Integer): Boolean
+    var
+        LicensePermission: Record "License Permission";
+    begin
+        LicensePermission.Get(0, TableId);
+        exit(
+            (LicensePermission."Insert Permission" = LicensePermission."Insert Permission"::Yes) and
+            (LicensePermission."Read Permission" = LicensePermission."Read Permission"::Yes) and
+            (LicensePermission."Modify Permission" = LicensePermission."Modify Permission"::Yes) and
+            (LicensePermission."Delete Permission" = LicensePermission."Delete Permission"::Yes)
+        );
+    end;
+    [NonDebuggable]
+    procedure HasPermission(TableId: Integer): Boolean
+    var
+        TempPermission: Record Permission temporary;
+        EffectivePermissionsMgt: Codeunit "Effective Permissions Mgt.";
+    begin
+        EffectivePermissionsMgt.PopulatePermissionRecordWithEffectivePermissionsForObject(TempPermission, UserSecurityId(), CopyStr(CompanyName(), 1, 50), 0, TableId);
+        exit(
+            (TempPermission."Insert Permission" = TempPermission."Insert Permission"::Yes) and
+            (TempPermission."Read Permission" = TempPermission."Read Permission"::Yes) and
+            (TempPermission."Modify Permission" = TempPermission."Modify Permission"::Yes) and
+            (TempPermission."Delete Permission" = TempPermission."Delete Permission"::Yes)
+        );
+    end;
+    var
+        SyncPerformanceInstance: Codeunit ibsSyncPerformanceInstance;
+        RecRefHelper: Codeunit ibsRecRefHelper;
+}
+codeunit 70103 ibsSyncOutgoingRecord
+{
+    trigger OnRun()
+    begin
+        PushOutgoingRecords();
+    end;
+    [NonDebuggable]
+    local procedure SetStatusProcessing(): Boolean
+    begin
+        exit(SetStatus(ibsSyncStatus::Recorded, ibsSyncStatus::Processing));
+    end;
+    [NonDebuggable]
+    local procedure SetStatusAwaitFeedback(): Boolean
+    begin
+        exit(SetStatus(ibsSyncStatus::Processing, ibsSyncStatus::AwaitFeedback))
+    end;
+    [NonDebuggable]
+    local procedure SetStatus(FromStatus: Enum ibsSyncStatus; ToStatus: Enum ibsSyncStatus): Boolean
+    var
+        OutgoingRecord: Record ibsOutgoingRecord;
+    begin
+        exit(SetStatus(OutgoingRecord, FromStatus, ToStatus));
+    end;
+    [NonDebuggable]
+    local procedure SetStatus(var OutgoingRecord: Record ibsOutgoingRecord; FromStatus: Enum ibsSyncStatus; ToStatus: Enum ibsSyncStatus): Boolean
+    begin
+        OutgoingRecord.SetLoadFields(LastStatus);
+        OutgoingRecord.LockTable();
+        OutgoingRecord.SetRange(LastStatus, FromStatus);
+        if not OutgoingRecord.FindSet(true, false) then
+            exit(false);
+        OutgoingRecord.ModifyAll(LastStatus, ToStatus, false);
+        Commit();
+        exit(true);
+    end;
+    [NonDebuggable]
+    local procedure PushOutgoingRecords()
+    var
+        OutgoingRecord: Record ibsOutgoingRecord;
+        Transactions: Dictionary of [Guid, Dictionary of [Text, Text]]; 
+    begin
+        if not SetStatusProcessing() then
+            exit;
+        if not FindOutgoingRecords(OutgoingRecord) then
+            exit;
+        Transactions := CompileTransactions(OutgoingRecord);
+        SendTransactions(Transactions);
+        SetStatusAwaitFeedback();
+    end;
+    [NonDebuggable]
+    local procedure CompileTransactions(var OutgoingRecord: Record ibsOutgoingRecord) Transactions: Dictionary of [Guid, Dictionary of [Text, Text]]
+    var
+        SyncSetFields: Dictionary of [Code[50], Dictionary of [Integer, List of [Integer]]]; 
+        TargetCompanySyncFields: Dictionary of [Code[50], Dictionary of [Integer, List of [Integer]]]; 
+        TargetCompanySyncSets: Dictionary of [Code[50], List of [Code[50]]]; 
+    begin
+        SyncSetFields := LoadSyncSetFields();
+        TargetCompanySyncSets := LoadTargetCompanySyncSets();
+        TargetCompanySyncFields := CreateTargetCompanySyncFields(TargetCompanySyncSets, SyncSetFields);
+        Transactions := CreateTransaction(TargetCompanySyncFields, OutgoingRecord);
+    end;
+    [NonDebuggable]
+    local procedure CreateTransaction(var TargetCompanySyncFields: Dictionary of [Code[50], Dictionary of [Integer, List of [Integer]]]; var OutgoingRecord: Record ibsOutgoingRecord) Transactions: Dictionary of [Guid, Dictionary of [Text, Text]]; 
+    var
+        TempOutgoingRecord: Record ibsOutgoingRecord temporary;
+        DataTransformation: Codeunit ibsDataTransformation;
+        TargetCompanyCode: Code[50];
+        TableFields: Dictionary of [Integer, List of [Integer]]; 
+        TargetCompanyData: Dictionary of [Text, Text]; 
+        TargetCompanies: List of [Code[50]];
+        TransactionRecords: List of [Text];
+        TransactionDataJson: Text;
+        TransactionGuid: Guid;
+    begin
+        TransactionGuid := CreateGuid();
+        TargetCompanies := TargetCompanySyncFields.Keys();
+        foreach TargetCompanyCode in TargetCompanies do begin
+            TempOutgoingRecord.DeleteAll(false);
+            TableFields := TargetCompanySyncFields.Get(TargetCompanyCode);
+            GetTempTargetCompanySyncOutgoingRecord(TableFields, OutgoingRecord, TempOutgoingRecord);
+            if TempOutgoingRecord.Find('-') then begin
+                repeat
+                    if IsInFilter(TargetCompanyCode, TempOutgoingRecord) then begin
+                        ApplyTriggerSettings(TempOutgoingRecord); 
+                        DataTransformation.ApplyDataTransformation(TargetCompanyCode, TempOutgoingRecord);
+                        AddOutgoingTransactionRecordSystemId(TransactionGuid, TargetCompanyCode, ibsSyncStatus::AwaitFeedback, '', TempOutgoingRecord);
+                        TransactionRecords.Add(MessageBody(TempOutgoingRecord));
+                    end;
+                until TempOutgoingRecord.Next(1) = 0;
+                TransactionDataJson := MessageBody(TransactionRecords);
+                TargetCompanyData.Add(TargetCompanyCode, TransactionDataJson);
+            end;
+        end;
+        Transactions.Add(TransactionGuid, TargetCompanyData);
+    end;
+    [NonDebuggable]
+    local procedure GetTempTargetCompanySyncOutgoingRecord(TableFields: Dictionary of [Integer, List of [Integer]]; var OutgoingRecord: Record ibsOutgoingRecord; var TempOutgoingRecord: Record ibsOutgoingRecord temporary)
+    var
+        FieldNo: Integer;
+        TableID: Integer;
+        FieldNos: List of [Integer];
+        TableIDs: List of [Integer];
+    begin
+        TableIDs := TableFields.Keys();
+        foreach TableID in TableIDs do begin
+            FieldNos := TableFields.Get(TableID);
+            foreach FieldNo in FieldNos do begin
+                OutgoingRecord.SetRange(TableID, TableID);
+                OutgoingRecord.SetRange(FieldNo, FieldNo);
+                OutgoingRecord.SetRange(LastStatus, ibsSyncStatus::Processing);
+                OutgoingRecord.FindSet(false, false);
+                repeat
+                    TempOutgoingRecord.Init();
+                    TempOutgoingRecord.TransferFields(OutgoingRecord);
+                    TempOutgoingRecord.Insert(false);
+                until OutgoingRecord.Next(1) = 0;
+            end;
+        end;
+    end;
+    [NonDebuggable]
+    local procedure CreateTargetCompanySyncFields(var TargetCompanySyncSets: Dictionary of [Code[50], List of [Code[50]]]; var SyncSetFields: Dictionary of [Code[50], Dictionary of [Integer, List of [Integer]]]) TargetCompanySyncFields: Dictionary of [Code[50], Dictionary of [Integer, List of [Integer]]]; 
+    var
+        TargetCompanyCode: Code[50];
+        TableFields: Dictionary of [Integer, List of [Integer]]; 
+        TargetCompanies: List of [Code[50]];
+    begin
+        TargetCompanies := TargetCompanySyncSets.Keys();
+        foreach TargetCompanyCode in TargetCompanies do begin
+            Clear(TableFields);
+            CreateTargetCompanySyncTableFields(TargetCompanyCode, TargetCompanySyncSets, SyncSetFields, TableFields);
+            TargetCompanySyncFields.Add(TargetCompanyCode, TableFields);
+        end;
+    end;
+    [NonDebuggable]
+    local procedure CreateTargetCompanySyncTableFields(TargetCompanyCode: Code[50]; var TargetCompanySyncSets: Dictionary of [Code[50], List of [Code[50]]]; var SyncSetFields: Dictionary of [Code[50], Dictionary of [Integer, List of [Integer]]]; var TargetCompanySyncTableFields: Dictionary of [Integer, List of [Integer]])
+    var
+        SyncSetCode: Code[50];
+        SyncSetCodes: List of [Code[50]];
+    begin
+        SyncSetCodes := TargetCompanySyncSets.Get(TargetCompanyCode);
+        foreach SyncSetCode in SyncSetCodes do
+            AddSyncSetToTargetCompanySyncTableFields(SyncSetCode, SyncSetFields, TargetCompanySyncTableFields);
+    end;
+    [NonDebuggable]
+    local procedure AddSyncSetToTargetCompanySyncTableFields(SyncSetCode: Code[50]; var SyncSetFields: Dictionary of [Code[50], Dictionary of [Integer, List of [Integer]]]; var TargetCompanySyncTableFields: Dictionary of [Integer, List of [Integer]])
+    var
+        TableFields: Dictionary of [Integer, List of [Integer]]; 
+        TableID: Integer;
+        FieldList: List of [Integer];
+        TableList: List of [Integer];
+    begin
+        if not SyncSetFields.ContainsKey(SyncSetCode) then
+            exit;
+        TableFields := SyncSetFields.Get(SyncSetCode);
+        TableList := TableFields.Keys;
+        foreach TableID in TableList do begin
+            FieldList := TableFields.Get(TableID);
+            AddTableToTargetCompanySyncTableFields(TableID, FieldList, TargetCompanySyncTableFields);
+        end;
+    end;
+    [NonDebuggable]
+    local procedure AddTableToTargetCompanySyncTableFields(TableID: Integer; FieldList: List of [Integer]; var TargetCompanySyncTableFields: Dictionary of [Integer, List of [Integer]])
+    var
+        FieldNo: Integer;
+    begin
+        foreach FieldNo in FieldList do
+            AddField(TableID, FieldNo, TargetCompanySyncTableFields);
+    end;
+    [NonDebuggable]
+    local procedure AddField(TableID: Integer; FieldNo: Integer; var TargetCompanySyncTableFields: Dictionary of [Integer, List of [Integer]])
+    var
+        FieldList: List of [Integer];
+    begin
+        if not TargetCompanySyncTableFields.ContainsKey(TableID) then begin
+            FieldList.Add(FieldNo);
+            TargetCompanySyncTableFields.Add(TableID, FieldList);
+        end else
+            TargetCompanySyncTableFields.Get(TableID).Add(FieldNo);
+    end;
+    [NonDebuggable]
+    local procedure LoadSyncSetFields() SyncSetFields: Dictionary of [Code[50], Dictionary of [Integer, List of [Integer]]]; 
+    var
+        ibsProcessingFields: Query ibsProcessingFields;
+        TableFields: Dictionary of [Integer, List of [Integer]]; 
+        FieldList: List of [Integer];
+    begin
+        ibsProcessingFields.Open();
+        while ibsProcessingFields.Read() do
+            if not SyncSetFields.ContainsKey(ibsProcessingFields.SyncSetCode) then begin
+                Clear(TableFields);
+                Clear(FieldList);
+                FieldList.Add(ibsProcessingFields.FieldNo);
+                TableFields.Add(ibsProcessingFields.TableID, FieldList); 
+                SyncSetFields.Add(ibsProcessingFields.SyncSetCode, TableFields);
+            end else
+                if not SyncSetFields.Get(ibsProcessingFields.SyncSetCode).ContainsKey(ibsProcessingFields.TableID) then begin
+                    Clear(FieldList);
+                    FieldList.Add(ibsProcessingFields.FieldNo);
+                    SyncSetFields.Get(ibsProcessingFields.SyncSetCode).Add(ibsProcessingFields.TableID, FieldList);
+                end else
+                    SyncSetFields.Get(ibsProcessingFields.SyncSetCode).Get(ibsProcessingFields.TableID).Add(ibsProcessingFields.FieldNo);
+    end;
+    [NonDebuggable]
+    local procedure LoadTargetCompanySyncSets() SyncSetTargetCompanies: Dictionary of [Code[50], List of [Code[50]]]
+    var
+        SyncSetTargetCompany: Record ibsSyncSetTargetCompany;
+        SyncSetCodes: List of [Code[50]];
+    begin
+        SyncSetTargetCompany.Find('-');
+        repeat
+            if not SyncSetTargetCompanies.ContainsKey(SyncSetTargetCompany.TargetCompanyCode) then begin
+                Clear(SyncSetCodes);
+                SyncSetCodes.Add(SyncSetTargetCompany.SyncSetCode);
+                SyncSetTargetCompanies.Add(SyncSetTargetCompany.TargetCompanyCode, SyncSetCodes);
+            end else
+                SyncSetTargetCompanies.Get(SyncSetTargetCompany.TargetCompanyCode).Add(SyncSetTargetCompany.SyncSetCode);
+        until SyncSetTargetCompany.Next(1) = 0;
+    end;
+    [NonDebuggable]
+    local procedure FindOutgoingRecords(var OutgoingRecord: Record ibsOutgoingRecord): Boolean
+    begin
+        OutgoingRecord.SetLoadFields(LastStatus, "RecordID", FieldNo, "Value");
+        OutgoingRecord.SetRange(LastStatus, ibsSyncStatus::Processing);
+        exit(OutgoingRecord.FindSet(true, false));
+    end;
+    [NonDebuggable]
+    local procedure SendTransactions(var Transactions: Dictionary of [Guid, Dictionary of [Text, Text]])
+    var
+        SyncTargetCompany: Record ibsSyncTargetCompany;
+        TargetCompanyCode: Code[50];
+        TransactionGuid: Guid;
+        TransactionGuids: List of [Guid];
+        TargetCompanies: List of [Text];
+        Json: Text;
+    begin
+        TransactionGuids := Transactions.Keys();
+        foreach TransactionGuid in TransactionGuids do begin
+            TargetCompanies := Transactions.Get(TransactionGuid).Keys();
+            foreach TargetCompanyCode in TargetCompanies do begin
+                SyncTargetCompany.Get(TargetCompanyCode);
+                if SyncTargetCompany.TestLicense() then begin
+                    Json := Transactions.Get(TransactionGuid).Get(TargetCompanyCode);
+                    SendAndLog(TransactionGuid, TargetCompanyCode, Json, SyncTargetCompany.ApiUrl(), SyncTargetCompany.BasicAccessAuthentication());
+                end;
+            end;
+        end;
+    end;
+    [NonDebuggable]
+    procedure IsInFilter(TargetCompanyCode: Code[50]; var TempOutgoingRecord: Record ibsOutgoingRecord temporary): Boolean
+    var
+        SyncSetTableFilter: Record ibsSyncSetTableFilter; //TODO: add to PerformanceInstance codeunit
+        RecordRef: RecordRef;
+    begin
+        RecordRef.Open(TempOutgoingRecord.RecordId.TableNo);
+        RecordRef.Get(TempOutgoingRecord.RecordId);
+        RecordRef.SetRecFilter();
+        SyncSetTableFilter.SetRange(TargetCompanyCode, TargetCompanyCode);
+        SyncSetTableFilter.SetRange(TableID, TempOutgoingRecord.TableID);
+        if not SyncSetTableFilter.FindSet(false, false) then
+            exit(true);
+        repeat
+            RecordRef.Field(SyncSetTableFilter.FieldNo).SetFilter(SyncSetTableFilter.FilterString);
+        until SyncSetTableFilter.Next(1) = 0;
+        exit(not RecordRef.IsEmpty());
+    end;
+    [NonDebuggable]
+    local procedure SendAndLog(TransactionGuid: Guid; TargetCompanyCode: Code[50]; Data: Text; ApiUrl: Text; ApiAuth: Text)
+    var
+        CompanySyncSetup: Record ibsCompanySyncSetup;
+        HttpClient: HttpClient;
+        HttpContent: HttpContent;
+        HttpResponseMessage: HttpResponseMessage;
+        HttpStatusMsg: Label '%1: %2', Locked = true;
+        TransferFailedLogMsg: Label 'Transfer to: "%1" failed (Reason: "%2")', Comment = '%1 = ApiUrl, %2 = ExceptionMessage';
+        ExceptionMessage: Text;
+    begin
+        CompanySyncSetup.Get();
+        CompanySyncSetup.TestField(OutgoingRequestAcceptLanguage);
+        HttpClient.DefaultRequestHeaders().Add('Authorization', ApiAuth);
+        HttpClient.DefaultRequestHeaders().Add('Accept-Language', CompanySyncSetup.OutgoingRequestAcceptLanguage);
+        HttpContent.WriteFrom(Data);
+        SetHttpContentHeaders(HttpContent);
+        If not TryHttpSend(HttpClient, HttpContent, ApiUrl, HttpResponseMessage) then begin
+            ExceptionMessage := GetExceptionMessage();
+            LogTransaction(TransactionGuid, TargetCompanyCode, Data, ibsSyncStatus::Error, StrSubstNo(TransferFailedLogMsg, ApiUrl, ExceptionMessage));
+            LogMessage('SendTransactions()', StrSubstNo(TransferFailedLogMsg, ApiUrl, ExceptionMessage), Verbosity::Error, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, 'SyncTransactionGuid', TransactionGuid);
+        end else
+            if HttpResponseMessage.IsBlockedByEnvironment then begin
+                LogTransaction(TransactionGuid, TargetCompanyCode, Data, ibsSyncStatus::Error, 'IsBlockedByEnvironment');
+                LogMessage('SendTransactions()', 'IsBlockedByEnvironment', Verbosity::Error, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, 'SyncTransactionGuid', TransactionGuid);
+            end else
+                if not HttpResponseMessage.IsSuccessStatusCode then begin
+                    LogTransaction(TransactionGuid, TargetCompanyCode, Data, ibsSyncStatus::Error, StrSubstNo(HttpStatusMsg, HttpResponseMessage.HttpStatusCode, HttpResponseMessage.ReasonPhrase));
+                    LogMessage('SendTransactions()', StrSubstNo(HttpStatusMsg, HttpResponseMessage.HttpStatusCode, HttpResponseMessage.ReasonPhrase), Verbosity::Error, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, 'SyncTransactionGuid', TransactionGuid)
+                end else begin
+                    LogTransaction(TransactionGuid, TargetCompanyCode, Data, ibsSyncStatus::AwaitFeedback, StrSubstNo(HttpStatusMsg, HttpResponseMessage.HttpStatusCode, HttpResponseMessage.ReasonPhrase));
+                    LogMessage('SendTransactions()', StrSubstNo(HttpStatusMsg, HttpResponseMessage.HttpStatusCode, HttpResponseMessage.ReasonPhrase), Verbosity::Normal, DataClassification::SystemMetadata, TelemetryScope::ExtensionPublisher, 'SyncTransactionGuid', TransactionGuid);
+                end;
+    end;
+    [NonDebuggable]
+    [TryFunction]
+    local procedure TryHttpSend(var HttpClient: HttpClient; var HttpContent: HttpContent; Url: Text; var HttpResponseMessage: HttpResponseMessage)
+    begin
+        HttpClient.Send(HttpRequestMessage(HttpContent, Url), HttpResponseMessage);
+    end;
+    [NonDebuggable]
+    local procedure GetExceptionMessage(): Text
+    var
+        DotNetExceptionHandler: Codeunit "DotNet Exception Handler";
+    begin
+        DotNetExceptionHandler.GetMessage();
+    end;
+    [NonDebuggable]
+    local procedure LogTransaction(TransactionGuid: Guid; TargetCompanyCode: Code[50]; JsonData: Text; Status: enum ibsSyncStatus; StatusInfo: Text)
+    var
+        OutgoingTransaction: Record ibsOutgoingTransaction;
+        OutgoingTransactionRecord: Record ibsOutgoingTransactionRecord;
+        OutStream: OutStream;
+    begin
+        OutgoingTransaction.Init();
+        OutgoingTransaction.Id := TransactionGuid;
+        OutgoingTransaction.TargetCompanyCode := TargetCompanyCode;
+        OutgoingTransaction.Status := Status;
+        OutgoingTransaction.StatusInfo := CopyStr(StatusInfo, 1, MaxStrLen(OutgoingTransaction.StatusInfo));
+        OutgoingTransaction.Insert(false);
+        OutgoingTransaction.Data.CreateOutStream(OutStream, TextEncoding::Windows);
+        OutStream.WriteText(JsonData);
+        OutgoingTransaction.Modify(false);
+        OutgoingTransactionRecord.SetRange(TransactionId, TransactionGuid);
+        OutgoingTransactionRecord.SetRange(TargetCompanyCode, TargetCompanyCode);
+        OutgoingTransactionRecord.ModifyAll(Status, Status, false);
+        OutgoingTransactionRecord.ModifyAll(StatusInfo, StatusInfo, false);
+    end;
+    [NonDebuggable]
+    local procedure AddOutgoingTransactionRecordSystemId(TransactionId: Guid; TargetCompanyCode: Code[50]; Status: Enum ibsSyncStatus; StatusInfo: Text[2048]; var TempOutgoingRecord: Record ibsOutgoingRecord temporary)
+    var
+        OutgoingTransactionRecord: Record ibsOutgoingTransactionRecord;
+    begin
+        OutgoingTransactionRecord.Init();
+        OutgoingTransactionRecord.TransactionId := TransactionId;
+        OutgoingTransactionRecord.TargetCompanyCode := TargetCompanyCode;
+        OutgoingTransactionRecord.OutgoingRecordEntryNo := TempOutgoingRecord.EntryNo;
+        OutgoingTransactionRecord.Status := Status;
+        OutgoingTransactionRecord.StatusInfo := StatusInfo;
+        OutgoingTransactionRecord.Insert(false);
+        TempOutgoingRecord.OtrSystemId := OutgoingTransactionRecord.SystemId;
+    end;
+    [NonDebuggable]
+    local procedure SetHttpContentHeaders(var HttpContent: HttpContent)
+    var
+        HttpHeaders: HttpHeaders;
+    begin
+        HttpContent.GetHeaders(HttpHeaders);
+        HttpHeaders.Remove('Content-Type');
+        HttpHeaders.Add('Content-Type', 'application/json');
+    end;
+    [NonDebuggable]
+    local procedure HttpRequestMessage(var HttpContent: HttpContent; RequestUri: Text) HttpRequestMessage: HttpRequestMessage
+    begin
+        HttpRequestMessage.Content := HttpContent;
+        HttpRequestMessage.Method('POST');
+        HttpRequestMessage.SetRequestUri(RequestUri);
+    end;
+    [NonDebuggable]
+    local procedure MessageBody(TransactionRecords: List of [Text]) MessageBodyRaw: Text
+    var
+        Sync: Codeunit ibsSync;
+        TransactionHeaderTok: Label '{"id": "%1","source": "%2", "incomingRecordFields":[', Locked = true;
+        TransactionFooterTok: Label ']}', Locked = true;
+        TransactionRecord: Text;
+    begin
+        //TODO CreateGuid()?
+        MessageBodyRaw := StrSubstNo(TransactionHeaderTok, Sync.StripGuid(CreateGuid()), Sync.SourceIdentifier());
+        foreach TransactionRecord in TransactionRecords do
+            MessageBodyRaw += TransactionRecord + ',';
+        MessageBodyRaw := DelChr(MessageBodyRaw, '>', ',');
+        MessageBodyRaw += TransactionFooterTok;
+    end;
+    [NonDebuggable]
+    local procedure MessageBody(var OutgoingRecord: Record ibsOutgoingRecord): Text
+    var
+        MessageBodyTxt: Label '{"recordId":"%1","entryNo":"%2","fieldNo":%3,"value":"%4","action":"%5","executeOnValidate":%6,"executeOnInsert":%7,"executeOnModify":%8,"executeOnDelete":%9,"otrSystemId":"%10"}', Locked = true;
+    begin
+        exit(StrSubstNo(MessageBodyTxt, OutgoingRecord.RecordID, OutgoingRecord.EntryNo, OutgoingRecord.FieldNo, OutgoingRecord.Value, OutgoingRecord.SyncAction, TranslateBoolean(OutgoingRecord.ExecuteOnValidate), TranslateBoolean(OutgoingRecord.ExecuteOnInsert), TranslateBoolean(OutgoingRecord.ExecuteOnModify), TranslateBoolean(OutgoingRecord.ExecuteOnDelete), OutgoingRecord.OtrSystemId));
+    end;
+    [NonDebuggable]
+    local procedure TranslateBoolean(Value: Boolean): Text
+    begin
+        if Value then
+            exit('true')
+        else
+            exit('false');
+    end;
+    local procedure ApplyTriggerSettings(var TempOutgoingRecord: Record ibsOutgoingRecord temporary)
+    var
+        SyncSetTable: Record ibsSyncSetTable;
+        SyncSetTableField: Record ibsSyncSetTableField;
+    begin
+        SyncSetTable.LoadFields(ExecuteOnInsert, ExecuteOnModify, ExecuteOnDelete);
+        SyncSetTable.SetRange(TableID, TempOutgoingRecord.TableID);
+        SyncSetTable.FindFirst();
+        TempOutgoingRecord.ExecuteOnInsert := SyncSetTable.ExecuteOnInsert;
+        TempOutgoingRecord.ExecuteOnModify := SyncSetTable.ExecuteOnModify;
+        TempOutgoingRecord.ExecuteOnDelete := SyncSetTable.ExecuteOnDelete;
+        SyncSetTableField.LoadFields(ExecuteOnValidate);
+        SyncSetTableField.SetRange(TableID, TempOutgoingRecord.TableID);
+        SyncSetTableField.SetRange(FieldNo, TempOutgoingRecord.FieldNo);
+        SyncSetTableField.FindFirst();
+        TempOutgoingRecord.ExecuteOnValidate := SyncSetTableField.ExecuteOnValidate;
+    end;
+}
+codeunit 70101 ibsSync
+{
+    procedure SourceIdentifier(): Text
+    var
+        IdentifierTok: Label '%1,%2', Locked = true;
+    begin
+        exit(StrSubstNo(IdentifierTok, EndpointBaseUrl(), CompanyId()));
+    end;
+    procedure EndpointBaseUrl(): Text
+    var
+        CompanySyncSetup: Record ibsCompanySyncSetup;
+        EnvironmentInformation: Codeunit "Environment Information";
+        AzureADTenant: Codeunit "Azure AD Tenant";
+        SaaSEndpointTok: Label 'https://api.businesscentral.dynamics.com/v2.0/%1/%2', Locked = true, Comment = '%1 = user domain name, %2 = environment name';
+    begin
+        if EnvironmentInformation.IsSaaS() then
+            exit(StrSubstNo(SaaSEndpointTok, AzureADTenant.GetAadTenantDomainName(), EnvironmentInformation.GetEnvironmentName()))
+        else begin
+            CompanySyncSetup.Get();
+            CompanySyncSetup.TestField(ApiEndpointBaseUrl);
+            exit(CompanySyncSetup.ApiEndpointBaseUrl);
+        end;
+    end;
+    procedure CompanyId(): Text
+    var
+        Company: Record Company;
+    begin
+        Company.Get(CompanyName);
+        exit(Company.Id);
+    end;
+    procedure StripGuid(Guid: Guid): Text
+    begin
+        exit(DelChr(DelChr(Guid, '<', '{'), '>', '}'));
+    end;
+}
+enum 70100 ibsSyncAction
+{
+    Extensible = false;
+    value(0; INSERT) { }
+    value(1; MODIFY) { }
+    value(2; DELETE) { }
+    value(3; RENAME) { }
+}
+codeunit 70102 ibsSyncPerformanceInstance
+{
+    SingleInstance = true;
+    [NonDebuggable]
+    procedure IsSyncActive(TableId: Integer; FieldNo: Integer): Boolean
+    var
+        SyncField: Record ibsSyncField;
+        Fields: List of [Integer];
+    begin
+        if SyncFields.ContainsKey(TableId) then
+            if SyncFields.Get(TableId).Contains(FieldNo) then
+                exit(true)
+            else begin
+                SyncField.SetRange(TableID, TableId);
+                SyncField.SetRange(FieldNo, FieldNo);
+                if SyncField.IsEmpty() then
+                    exit(false);
+                SyncFields.Get(TableId).Add(FieldNo);
+                exit(true);
+            end
+        else begin
+            SyncField.SetRange(TableID, TableId);
+            SyncField.SetRange(FieldNo, FieldNo);
+            if SyncField.IsEmpty() then
+                exit(false);
+            Fields.Add(FieldNo);
+            SyncFields.Add(TableId, Fields);
+            exit(true);
+        end;
+    end;
+    [NonDebuggable]
+    procedure UserFullName(UserSecurityID: Guid): Text
+    var
+        User: Record User;
+    begin
+        if Users.ContainsKey(UserSecurityID) then
+            exit(Users.Get(UserSecurityID))
+        else
+            if User.Get(UserSecurityID) then begin
+                Users.Add(UserSecurityID, User."Full Name");
+                exit(User."Full Name");
+            end;
+        exit(UserSecurityID);
+    end;
+    [NonDebuggable]
+    procedure FieldName(TableId: Integer; FieldNo: Integer): Text
+    var
+        Field: Record Field;
+        Fields: Dictionary of [Integer, Text];
+    begin
+        if FieldNames.ContainsKey(TableId) then
+            if FieldNames.Get(TableId).ContainsKey(FieldNo) then
+                exit(FieldNames.Get(TableId).Get(FieldNo))
+            else begin
+                Field.Get(TableId, FieldNo);
+                FieldNames.Get(TableId).Add(FieldNo, Field.FieldName);
+                exit(Field.FieldName);
+            end
+        else
+            if Field.Get(TableId, FieldNo) then begin
+                Fields.Add(FieldNo, Field.FieldName);
+                FieldNames.Add(TableId, Fields);
+                exit(Field.FieldName);
+            end else
+                exit('');
+    end;
+    var
+        SyncFields: Dictionary of [Integer, List of [Integer]];
+        Users: Dictionary of [Text, Text];
+        FieldNames: Dictionary of [Integer, Dictionary of [Integer, Text]];
+}
+enum 70101 ibsSyncStatus
+{
+    Extensible = false;
+    value(0; Recorded) { }
+    value(1; Processing) { }
+    value(2; AwaitFeedback) { }
+    value(3; Error) { }
+    value(4; Completed) { }
+    value(5; Canceled) { }
+}
+table 70104 ibsIncomingRecord
+{
+    Caption = 'Incoming Record';
+    DataClassification = CustomerContent;
+    LookupPageId = ibsIncomingRecordList;
+    DrillDownPageId = ibsIncomingRecordList;
+    fields
+    {
+        field(1; EntryNo; Integer)
+        {
+            AutoIncrement = true;
+            Caption = 'Entry No.';
+            DataClassification = SystemMetadata;
+        }
+        field(2; RecordID; RecordId)
+        {
+            Caption = 'Record ID';
+            DataClassification = CustomerContent;
+        }
+        field(3; FieldNo; Integer)
+        {
+            Caption = 'Field No.';
+            DataClassification = SystemMetadata;
+        }
+        field(4; "Value"; Text[2048])
+        {
+            Caption = 'Value';
+            DataClassification = CustomerContent;
+        }
+        field(5; Status; Enum ibsSyncStatus)
+        {
+            Caption = 'Status';
+            DataClassification = SystemMetadata;
+        }
+        field(6; StatusInfo; Text[2048])
+        {
+            Caption = 'Status Info';
+            DataClassification = CustomerContent;
+        }
+        field(7; TransactionId; Guid)
+        {
+            Caption = 'Transaction ID';
+            DataClassification = SystemMetadata;
+            TableRelation = ibsIncomingTransaction.Id;
+        }
+        field(8; SyncAction; Enum ibsSyncAction)
+        {
+            Caption = 'SyncAction';
+            DataClassification = SystemMetadata;
+        }
+        field(9; ExecuteOnValidate; Boolean)
+        {
+            Caption = 'Validate', Locked = true;
+            DataClassification = SystemMetadata;
+        }
+        field(10; ExecuteOnInsert; Boolean)
+        {
+            Caption = 'OnInsert', Locked = true;
+            DataClassification = SystemMetadata;
+        }
+        field(11; ExecuteOnModify; Boolean)
+        {
+            Caption = 'OnModify', Locked = true;
+            DataClassification = SystemMetadata;
+        }
+        field(12; ExecuteOnRename; Boolean)
+        {
+            Caption = 'OnRename', Locked = true;
+            DataClassification = SystemMetadata;
+            ObsoleteState = Pending;
+            ObsoleteReason = 'Business Central has no RunTrigger parameter for RefRef.Rename()';
+        }
+        field(13; ExecuteOnDelete; Boolean)
+        {
+            Caption = 'OnDelete', Locked = true;
+            DataClassification = SystemMetadata;
+        }
+        field(14; OtrSystemId; Guid)
+        {
+            Caption = 'OtrSystemId', Locked = true;
+            DataClassification = SystemMetadata;
+            //TableRelation = ibsOutgoingTransactionRecord.SystemId;
+        }
+    }
+    keys
+    {
+        key(PrimaryKey; EntryNo)
+        {
+            Clustered = true;
+        }
+        key(CreatedAt; SystemCreatedAt)
+        {
+        }
+        key(Status; Status)
+        {
+            //AA0210
+            MaintainSqlIndex = false;
+        }
+    }
+}
+page 70105 ibsIncomingRecordList
+{
+    ApplicationArea = All;
+    Caption = 'Incoming Record';
+    PageType = List;
+    SourceTable = ibsIncomingRecord;
+    SourceTableView = sorting(SystemCreatedAt) order(descending);
+    UsageCategory = History;
+    InsertAllowed = false;
+    ModifyAllowed = false;
+    DeleteAllowed = false;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field(EntryNo; Rec.EntryNo)
+                {
+                    ToolTip = 'Specifies the value of the Entry No. field.';
+                    ApplicationArea = All;
+                }
+                field(SystemCreatedAt; Rec.SystemCreatedAt)
+                {
+                    ToolTip = 'Specifies the value of the SystemCreatedAt field.';
+                    ApplicationArea = All;
+                    Width = 16;
+                }
+                field(SystemCreatedBy; SyncPerformanceInstance.UserFullName(Rec.SystemCreatedBy))
+                {
+                    Caption = 'Created by';
+                    ToolTip = 'Specifies the value of the SystemCreatedBy field.';
+                    ApplicationArea = All;
+                    Width = 16;
+                    Visible = false;
+                }
+                field(Status; Rec.Status)
+                {
+                    Caption = 'Status';
+                    ToolTip = 'Status';
+                    ApplicationArea = All;
+                }
+                field(StatusInfo; Rec.StatusInfo)
+                {
+                    ToolTip = 'Specifies the value of the Status Info field.';
+                    ApplicationArea = All;
+                }
+                field(SyncAction; Rec.SyncAction)
+                {
+                    ToolTip = 'Action';
+                    ApplicationArea = All;
+                }
+                field(TransactionId; Rec.TransactionId)
+                {
+                    ToolTip = 'Specifies the value of the Transaction Id field.';
+                    ApplicationArea = All;
+                }
+                field(TableID; Rec.RecordID.TableNo())
+                {
+                    Caption = 'Table ID';
+                    ToolTip = 'The table ID.';
+                    ApplicationArea = All;
+                }
+                field(FieldNo; Rec.FieldNo)
+                {
+                    Caption = 'Field No.';
+                    ToolTip = 'Specifies the value of the FieldNo field.';
+                    ApplicationArea = All;
+                }
+                field("Field Name"; SyncPerformanceInstance.FieldName(Rec."RecordID".TableNo, Rec.FieldNo))
+                {
+                    Caption = 'Field Name';
+                    ToolTip = 'Specifies the value of the FieldNo field.';
+                    ApplicationArea = All;
+                }
+                field(Value; Rec.Value)
+                {
+                    Caption = 'Value';
+                    ToolTip = 'Specifies the value of the Value field.';
+                    ApplicationArea = All;
+                }
+                field("RecordID"; Format(Rec."RecordID"))
+                {
+                    Caption = 'Record ID';
+                    ToolTip = 'Specifies the value of the Record ID field.';
+                    ApplicationArea = All;
+                    Width = 128;
+                }
+            }
+        }
+    }
+    actions
+    {
+        area(Processing)
+        {
+            group(Debug)
+            {
+                action(SyncIncomingRecords)
+                {
+                    Caption = 'Sync. Incoming Records';
+                    ApplicationArea = All;
+                    Image = Allocate;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    PromotedIsBig = true;
+                    PromotedOnly = true;
+                    ToolTip = 'Manually apply incoming changes';
+                    RunObject = codeunit ibsSyncIncomingRecord;
+                }
+                action(DebugResetStatus)
+                {
+                    Caption = 'Debug Reset Status';
+                    ApplicationArea = All;
+                    Image = Restore;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    PromotedIsBig = true;
+                    PromotedOnly = true;
+                    Scope = Repeater;
+                    ToolTip = 'Set "Status" to "Recorded" and clear "Status Info"';
+                    trigger OnAction()
+                    var
+                        SyncIncomingRecord: Codeunit ibsSyncIncomingRecord;
+                    begin
+                        SyncIncomingRecord.DebugResetStatus(Rec.TransactionId, ibsSyncStatus::Error);
+                        SyncIncomingRecord.DebugResetStatus(Rec.TransactionId, ibsSyncStatus::Processing);
+                        SyncIncomingRecord.DebugResetStatus(Rec.TransactionId, ibsSyncStatus::AwaitFeedback);
+                        //SyncIncomingRecord.DebugResetStatus(ibsSyncStatus::Completed);
+                    end;
+                }
+            }
+        }
+    }
+    var
+        SyncPerformanceInstance: Codeunit ibsSyncPerformanceInstance;
+}
+table 70106 ibsIncomingTransaction
+{
+    DataClassification = CustomerContent;
+    LookupPageId = ibsIncomingTransactionList;
+    DrillDownPageId = ibsIncomingTransactionList;
+    fields
+    {
+        field(1; Id; Guid)
+        {
+            Caption = 'Id';
+            DataClassification = SystemMetadata;
+        }
+        field(5; Status; Enum ibsSyncStatus)
+        {
+            Caption = 'Status';
+            DataClassification = SystemMetadata;
+        }
+        field(6; StatusInfo; Text[2048])
+        {
+            Caption = 'Status Info';
+            DataClassification = CustomerContent;
+        }
+        field(7; Source; Text[1024])
+        {
+            Caption = 'Source';
+            DataClassification = CustomerContent;
+        }
+    }
+    keys
+    {
+        key(PrimaryKey; Id)
+        {
+            Clustered = true;
+        }
+    }
+    trigger OnDelete()
+    var
+        IncomingRecord: Record ibsIncomingRecord;
+    begin
+        IncomingRecord.SetRange(TransactionId, Rec.Id);
+        IncomingRecord.DeleteAll(true);
+    end;
+    procedure ResetStatus(ResetTransactionId: Guid)
+    var
+        IncomingRecord: Record ibsIncomingRecord;
+        IncomingTransaction: Record ibsIncomingTransaction;
+    begin
+        IncomingRecord.SetLoadFields(Status);
+        IncomingRecord.SetRange(TransactionId, ResetTransactionId);
+        if IncomingRecord.IsEmpty() then
+            exit;
+        IncomingRecord.ModifyAll(Status, ibsSyncStatus::Recorded, true);
+        IncomingTransaction.Get(ResetTransactionId);
+        IncomingTransaction.Status := ibsSyncStatus::Recorded;
+        IncomingTransaction.Modify(false);
+    end;
+}
+page 70108 ibsIncomingTransactionList
+{
+    ApplicationArea = All;
+    Caption = 'IncomingTransactionList';
+    PageType = List;
+    SourceTable = ibsIncomingTransaction;
+    UsageCategory = History;
+    InsertAllowed = false;
+    ModifyAllowed = false;
+    DeleteAllowed = false;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field(Id; Rec.Id)
+                {
+                    ToolTip = 'Specifies the value of the Id field.';
+                    ApplicationArea = All;
+                }
+                field(Status; Rec.Status)
+                {
+                    ToolTip = 'Specifies the value of the Status field.';
+                    ApplicationArea = All;
+                }
+                field(StatusInfo; Rec.StatusInfo)
+                {
+                    ToolTip = 'Specifies the value of the Status Info field.';
+                    ApplicationArea = All;
+                }
+            }
+        }
+    }
+    actions
+    {
+        area(Processing)
+        {
+            action(ResetStatus)
+            {
+                ApplicationArea = All;
+                Caption = 'Reset Status';
+                Image = Restore;
+                Promoted = true;
+                PromotedCategory = Process;
+                PromotedIsBig = true;
+                PromotedOnly = true;
+                ToolTip = 'Resets status of not yet completed records.';
+                Scope = Repeater;
+                trigger OnAction()
+                begin
+                    Rec.ResetStatus(Rec.Id);
+                end;
+            }
+            action(DeleteIncomingTransaction)
+            {
+                ApplicationArea = All;
+                Caption = 'Delete Transaction';
+                Image = Delete;
+                Promoted = true;
+                PromotedCategory = Process;
+                PromotedIsBig = true;
+                PromotedOnly = true;
+                ToolTip = 'Deletes the transaction and its records.';
+                Scope = Repeater;
+                trigger OnAction()
+                begin
+                    if not Confirm('Do you really want to delete the transaction "%1" and all related records?') then
+                        exit;
+                    Rec.Delete(true);
+                end;
+            }
+        }
+    }
+}
+table 70103 ibsOutgoingRecord
+{
+    Caption = 'Outgoing Record';
+    DataClassification = CustomerContent;
+    LookupPageId = ibsOutgoingRecordList;
+    DrillDownPageId = ibsOutgoingRecordList;
+    fields
+    {
+        field(1; EntryNo; Integer)
+        {
+            AutoIncrement = true;
+            Caption = 'Entry No.';
+            DataClassification = SystemMetadata;
+        }
+        field(2; TableID; Integer)
+        {
+            Caption = 'Table ID';
+            DataClassification = SystemMetadata;
+        }
+        field(3; RecordID; RecordId)
+        {
+            Caption = 'Record ID';
+            DataClassification = CustomerContent;
+        }
+        field(4; FieldNo; Integer)
+        {
+            Caption = 'Field No.';
+            DataClassification = SystemMetadata;
+        }
+        field(5; "Value"; Text[2048])
+        {
+            Caption = 'Value';
+            DataClassification = CustomerContent;
+        }
+        field(6; LastStatus; Enum ibsSyncStatus)
+        {
+            Caption = 'Last Status';
+            DataClassification = SystemMetadata;
+        }
+        field(7; LastStatusInfo; Text[2048])
+        {
+            Caption = 'Last Status Info';
+            DataClassification = CustomerContent;
+        }
+        field(8; SyncAction; Enum ibsSyncAction)
+        {
+            Caption = 'SyncAction';
+            DataClassification = SystemMetadata;
+        }
+        field(9; OtrSystemId; Guid)
+        {
+            Caption = 'OtrSystemId', Locked = true;
+            DataClassification = SystemMetadata;
+        }
+        field(10; ExecuteOnValidate; Boolean)
+        {
+            Caption = 'OnValidate', Locked = true;
+            DataClassification = SystemMetadata;
+        }
+        field(11; ExecuteOnInsert; Boolean)
+        {
+            Caption = 'OnInsert', Locked = true;
+            DataClassification = SystemMetadata;
+        }
+        field(12; ExecuteOnModify; Boolean)
+        {
+            Caption = 'OnValidate', Locked = true;
+            DataClassification = SystemMetadata;
+        }
+        field(13; ExecuteOnDelete; Boolean)
+        {
+            Caption = 'OnValidate', Locked = true;
+            DataClassification = SystemMetadata;
+        }
+        field(14; LanguageID; Integer)
+        {
+            Caption = 'Language ID';
+            DataClassification = CustomerContent;
+        }
+        field(15; CultureName; Text[10])
+        {
+            Caption = 'Culture Name';
+            DataClassification = CustomerContent;
+        }
+    }
+    keys
+    {
+        key(PrimaryKey; EntryNo)
+        {
+            Clustered = true;
+        }
+        key(CreatedAt; SystemCreatedAt)
+        {
+        }
+    }
+    trigger OnModify()
+    begin
+        UpdateOutgoingTransactionRecord();
+    end;
+    [NonDebuggable]
+    local procedure UpdateOutgoingTransactionRecord()
+    var
+        OutgoingTransactionRecord: Record ibsOutgoingTransactionRecord;
+    begin
+        if IsNullGuid(Rec.OtrSystemId) then
+            exit;
+        OutgoingTransactionRecord.GetBySystemId(Rec.OtrSystemId);
+        OutgoingTransactionRecord.Status := Rec.LastStatus;
+        OutgoingTransactionRecord.StatusInfo := Rec.LastStatusInfo;
+        OutgoingTransactionRecord.Modify(false);
+    end;
+    [NonDebuggable]
+    procedure CancelTransaction()
+    var
+        CanceledByUserLbl: Label 'Canceled by user!';
+    begin
+        Rec.LastStatus := ibsSyncStatus::Canceled;
+        Rec.LastStatusInfo := CanceledByUserLbl;
+        Rec.Modify(true);
+    end;
+}
+page 70100 ibsOutgoingRecordList
+{
+    ApplicationArea = All;
+    Caption = 'Outgoing Record';
+    PageType = List;
+    SourceTable = ibsOutgoingRecord;
+    SourceTableView = sorting(SystemCreatedAt) order(descending);
+    UsageCategory = History;
+    InsertAllowed = false;
+    ModifyAllowed = false;
+    DeleteAllowed = false;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field(EntryNo; Rec.EntryNo)
+                {
+                    ToolTip = 'Specifies the value of the Entry No. field.';
+                    ApplicationArea = All;
+                }
+                field(SystemCreatedAt; Rec.SystemCreatedAt)
+                {
+                    ToolTip = 'Specifies the value of the SystemCreatedAt field.';
+                    ApplicationArea = All;
+                    Width = 16;
+                }
+                field(SystemCreatedBy; SyncPerformanceInstance.UserFullName(Rec.SystemCreatedBy))
+                {
+                    Caption = 'Created by';
+                    ToolTip = 'Specifies the value of the SystemCreatedBy field.';
+                    ApplicationArea = All;
+                    Width = 16;
+                    Visible = false;
+                }
+                field(Status; Rec.LastStatus)
+                {
+                    Caption = 'Status';
+                    ToolTip = 'Status';
+                    ApplicationArea = All;
+                }
+                field(StatusInfo; Rec.LastStatusInfo)
+                {
+                    ToolTip = 'Specifies the value of the Status Info field.';
+                    ApplicationArea = All;
+                }
+                field(SyncAction; Rec.SyncAction)
+                {
+                    Caption = 'Action';
+                    ToolTip = 'Action';
+                    ApplicationArea = All;
+                }
+                field(TableID; Rec.TableID)
+                {
+                    Caption = 'Table ID';
+                    ToolTip = 'The table ID.';
+                    ApplicationArea = All;
+                }
+                field(FieldNo; Rec.FieldNo)
+                {
+                    Caption = 'Field No.';
+                    ToolTip = 'The field number.';
+                    ApplicationArea = All;
+                }
+                field("Field Name"; SyncPerformanceInstance.FieldName(Rec."RecordID".TableNo, Rec.FieldNo))
+                {
+                    Caption = 'Field Name';
+                    ToolTip = 'Specifies the value of the FieldNo field.';
+                    ApplicationArea = All;
+                }
+                field(Value; Rec.Value)
+                {
+                    Caption = 'Value';
+                    ToolTip = 'Specifies the value of the Value field.';
+                    ApplicationArea = All;
+                }
+                field("RecordID"; Format(Rec."RecordID"))
+                {
+                    Caption = 'Record ID';
+                    ToolTip = 'Specifies the value of the Record ID field.';
+                    ApplicationArea = All;
+                    Width = 128;
+                }
+            }
+        }
+    }
+    actions
+    {
+        area(Processing)
+        {
+            group(Debug)
+            {
+                action(SyncPush)
+                {
+                    Caption = 'Sync Push';
+                    ApplicationArea = All;
+                    Image = Allocate;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    PromotedIsBig = true;
+                    ToolTip = 'Manual "Sync Push" for debugging';
+                    RunObject = codeunit ibsSyncOutgoingRecord;
+                }
+                action(SyncResetError)
+                {
+                    Caption = 'Sync Reset Error';
+                    ApplicationArea = All;
+                    Image = Restore;
+                    ToolTip = 'Re-set status "Error" back to "Recorded" and clear "StatusInfo"';
+                    trigger OnAction()
+                    var
+                        SyncDebug: Codeunit ibsSyncOutgoingDebug;
+                    begin
+                        SyncDebug.DebugResetStatus(ibsSyncStatus::Error);
+                    end;
+                }
+                action(SyncResetProcessing)
+                {
+                    Caption = 'Sync Reset Processing';
+                    ApplicationArea = All;
+                    Image = Restore;
+                    ToolTip = 'Re-set status "Processing" back to "Recorded" and clear "StatusInfo"';
+                    trigger OnAction()
+                    var
+                        SyncDebug: Codeunit ibsSyncOutgoingDebug;
+                    begin
+                        SyncDebug.DebugResetStatus(ibsSyncStatus::Processing);
+                    end;
+                }
+                action(SyncResetAwaitFeedback)
+                {
+                    Caption = 'Sync Reset AwaitFeedback';
+                    ApplicationArea = All;
+                    Image = Restore;
+                    ToolTip = 'Re-set status "AwaitFeedback" back to "Recorded" and clear "StatusInfo"';
+                    trigger OnAction()
+                    var
+                        SyncDebug: Codeunit ibsSyncOutgoingDebug;
+                    begin
+                        SyncDebug.DebugResetStatus(ibsSyncStatus::AwaitFeedback);
+                    end;
+                }
+                action(ShowLastOutgoingJsonData)
+                {
+                    Caption = 'ShowLastOutgoingJsonData';
+                    ApplicationArea = All;
+                    Image = Info;
+                    ToolTip = 'ShowLastOutgoingJsonData';
+                    trigger OnAction()
+                    var
+                        SyncDebug: Codeunit ibsSyncOutgoingDebug;
+                    begin
+                        SyncDebug.ShowLastOutgoingJsonData();
+                    end;
+                }
+                action(Cancel)
+                {
+                    Caption = 'Cancel';
+                    ApplicationArea = All;
+                    Image = Cancel;
+                    Promoted = true;
+                    PromotedCategory = Process;
+                    PromotedIsBig = true;
+                    ToolTip = 'Aborts the processing of the record!';
+                    Scope = Repeater;
+                    trigger OnAction()
+                    begin
+                        Rec.CancelTransaction();
+                    end;
+                }
+                action(SyncSetProcessing)
+                {
+                    Caption = 'Sync Set Curr Record to Processing';
+                    ApplicationArea = All;
+                    Image = Process;
+                    ToolTip = 'Set status to "Processing".';
+                    Scope = Repeater;
+                    trigger OnAction()
+                    var
+                        SyncDebug: Codeunit ibsSyncOutgoingDebug;
+                    begin
+                        SyncDebug.DebugSetStatusProcessing(Rec);
+                    end;
+                }
+            }
+        }
+    }
+    var
+        SyncPerformanceInstance: Codeunit ibsSyncPerformanceInstance;
+}
+//https://businesscentral.dynamics.com/TempSB?table=70111
+table 70111 ibsOutgoingTransaction
+{
+    DataClassification = CustomerContent;
+    LookupPageId = ibsOutgoingTransactionList;
+    DrillDownPageId = ibsOutgoingTransactionList;
+    fields
+    {
+        field(1; Id; Guid)
+        {
+            Caption = 'Id';
+            DataClassification = SystemMetadata;
+        }
+        field(2; TargetCompanyCode; Code[50])
+        {
+            Caption = 'Target Company Code';
+            DataClassification = CustomerContent;
+            TableRelation = ibsSyncTargetCompany;
+        }
+        field(3; Data; Blob)
+        {
+            Caption = 'Data';
+            DataClassification = CustomerContent;
+        }
+        field(6; Status; Enum ibsSyncStatus)
+        {
+            Caption = 'Status';
+            DataClassification = SystemMetadata;
+        }
+        field(7; StatusInfo; Text[2048])
+        {
+            Caption = 'Status Info';
+            DataClassification = CustomerContent;
+        }
+        field(8; NoOfRecords; Integer)
+        {
+            Caption = 'No. of Records';
+            FieldClass = FlowField;
+            CalcFormula = count(ibsOutgoingTransactionRecord where(TransactionId = field(Id), TargetCompanyCode = field(TargetCompanyCode)));
+            Editable = false;
+        }
+    }
+    keys
+    {
+        key(PrimaryKey; Id, TargetCompanyCode)
+        {
+            Clustered = true;
+        }
+        key(CreatedAt; SystemCreatedAt) { }
+    }
+}
+page 70106 ibsOutgoingTransactionList
+{
+    ApplicationArea = All;
+    Caption = 'Outgoing Transactions';
+    PageType = List;
+    SourceTable = ibsOutgoingTransaction;
+    UsageCategory = History;
+    InsertAllowed = false;
+    ModifyAllowed = false;
+    DeleteAllowed = false;
+    SourceTableView = sorting(SystemCreatedAt) order(descending);
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field(Id; Rec.Id)
+                {
+                    ToolTip = 'Specifies the value of the Id field.';
+                    ApplicationArea = All;
+                }
+                field(TargetCompanyCode; Rec.TargetCompanyCode)
+                {
+                    ToolTip = 'Specifies the value of the Target Company Code field.';
+                    ApplicationArea = All;
+                }
+                field(Status; Rec.Status)
+                {
+                    ToolTip = 'Specifies the value of the Status field.';
+                    ApplicationArea = All;
+                }
+                field(StatusInfo; Rec.StatusInfo)
+                {
+                    ToolTip = 'Specifies the value of the Status Info field.';
+                    ApplicationArea = All;
+                }
+                field(NoOfRecords; Rec.NoOfRecords)
+                {
+                    ToolTip = 'The number of detailed transaction records.';
+                    ApplicationArea = All;
+                }
+            }
+        }
+    }
+}
+table 70116 ibsOutgoingTransactionRecord
+{
+    DataClassification = CustomerContent;
+    LookupPageId = ibsOutgoingTransactRecordList;
+    DrillDownPageId = ibsOutgoingTransactRecordList;
+    fields
+    {
+        field(1; TransactionId; Guid)
+        {
+            Caption = 'Transaction ID';
+            DataClassification = SystemMetadata;
+        }
+        field(2; TargetCompanyCode; Code[50])
+        {
+            Caption = 'Target Company Code';
+            DataClassification = CustomerContent;
+        }
+        field(3; OutgoingRecordEntryNo; Integer)
+        {
+            Caption = 'Outgoing Record Entry No.';
+            DataClassification = SystemMetadata;
+        }
+        field(6; Status; Enum ibsSyncStatus)
+        {
+            Caption = 'Status';
+            DataClassification = SystemMetadata;
+        }
+        field(7; StatusInfo; Text[2048])
+        {
+            Caption = 'Status Info';
+            DataClassification = CustomerContent;
+        }
+    }
+    keys
+    {
+        key(PrimaryKey; TransactionId, TargetCompanyCode, OutgoingRecordEntryNo)
+        {
+            Clustered = true;
+        }
+        key(PrimarySorting; SystemCreatedAt)
+        { }
+    }
+}
+page 70117 ibsOutgoingTransactRecordList
+{
+    ApplicationArea = All;
+    Caption = 'Outgoing Transaction Records';
+    PageType = List;
+    SourceTable = ibsOutgoingTransactionRecord;
+    SourceTableView = sorting(SystemCreatedAt) order(descending);
+    UsageCategory = History;
+    InsertAllowed = false;
+    ModifyAllowed = false;
+    DeleteAllowed = false;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field(TransactionId; Rec.TransactionId)
+                {
+                    ToolTip = 'Specifies the value of the Transaction ID field.';
+                    ApplicationArea = All;
+                }
+                field(TargetCompanyCode; Rec.TargetCompanyCode)
+                {
+                    ToolTip = 'Specifies the value of the Target Company Code field.';
+                    ApplicationArea = All;
+                }
+                field(OutgoingRecordEntryNo; Rec.OutgoingRecordEntryNo)
+                {
+                    ToolTip = 'Specifies the value of the Outgoing Record Entry No. field.';
+                    ApplicationArea = All;
+                }
+                field(Status; Rec.Status)
+                {
+                    ToolTip = 'Specifies the value of the Status field.';
+                    ApplicationArea = All;
+                }
+                field(StatusInfo; Rec.StatusInfo)
+                {
+                    ToolTip = 'Specifies the value of the Status Info field.';
+                    ApplicationArea = All;
+                }
+            }
+        }
+    }
+}
+table 70107 ibsSyncSet
+{
+    DataClassification = CustomerContent;
+    DrillDownPageId = ibsSyncSetList;
+    LookupPageId = ibsSyncSetList;
+    fields
+    {
+        field(1; Code; Code[50])
+        {
+            NotBlank = true;
+            Caption = 'Code';
+            DataClassification = CustomerContent;
+        }
+        field(2; Description; Text[100])
+        {
+            Caption = 'Description';
+            DataClassification = CustomerContent;
+        }
+        field(3; Active; Boolean)
+        {
+            Caption = 'Active';
+            DataClassification = SystemMetadata;
+            trigger OnValidate()
+            begin
+                if Active then
+                    Activate()
+                else
+                    Deactivate();
+            end;
+        }
+        field(4; NOOfSyncSetTableFields; Integer)
+        {
+            Editable = false;
+            FieldClass = FlowField;
+            CalcFormula = count(ibsSyncSetTableField where(SyncSetCode = field(Code)));
+            ObsoleteState = Pending;
+            ObsoleteReason = 'Synchronization monitoring rework in a future version.';
+        }
+        field(99; NoOfSyncFields; Integer)
+        {
+            Editable = false;
+            FieldClass = FlowField;
+            CalcFormula = count(ibsSyncField);
+            ObsoleteState = Pending;
+            ObsoleteReason = 'Synchronization monitoring rework in a future version.';
+        }
+    }
+    keys
+    {
+        key(PrimaryKey; Code)
+        {
+            Clustered = true;
+        }
+    }
+    trigger OnDelete()
+    var
+        SyncSetField: Record ibsSyncSetField;
+        SyncSetTable: Record ibsSyncSetTable;
+        SyncSetTargetCompany: Record ibsSyncSetTargetCompany;
+    begin
+        SyncSetTable.SetRange(SyncSetCode, Rec.Code);
+        SyncSetTable.DeleteAll(true);
+        SyncSetTargetCompany.SetRange(SyncSetCode, Rec.Code);
+        SyncSetTargetCompany.DeleteAll(true);
+        //should be empty by now. SyncSetTable removes SyncSetTableField. SyncSetTableField remove SyncSetFields
+        SyncSetField.SetRange(SyncSetCode, Rec.Code);
+        if not SyncSetField.IsEmpty() then
+            Message('ERROR CODE 57UP1D!');
+        SyncSetField.DeleteAll(true);
+    end;
+    [NonDebuggable]
+    local procedure Activate()
+    var
+        SyncSetTableField: Record ibsSyncSetTableField;
+    begin
+        SyncSetTableField.SetRange(SyncSetCode, Rec.Code);
+        if SyncSetTableField.IsEmpty() then
+            exit;
+        if SyncSetTableField.FindSet(false, false) then
+            repeat
+                SyncSetTableField.AddField();
+            until SyncSetTableField.Next(1) = 0;
+    end;
+    [NonDebuggable]
+    local procedure Deactivate()
+    var
+        SyncSetTableField: Record ibsSyncSetTableField;
+    begin
+        SyncSetTableField.SetRange(SyncSetCode, Rec.Code);
+        if SyncSetTableField.IsEmpty() then
+            exit;
+        SyncSetTableField.FindSet(false, false);
+        repeat
+            SyncSetTableField.RemoveField();
+        until SyncSetTableField.Next(1) = 0;
+    end;
+}
+page 70110 ibsSyncSetCard
+{
+    Caption = 'Sync. Set';
+    PageType = Card;
+    SourceTable = ibsSyncSet;
+    UsageCategory = None;
+    layout
+    {
+        area(content)
+        {
+            group(General)
+            {
+                field("Code"; Rec."Code")
+                {
+                    ToolTip = 'Specifies the value of the Code field.';
+                    ApplicationArea = All;
+                }
+                field(Description; Rec.Description)
+                {
+                    ToolTip = 'Specifies the value of the Description field.';
+                    ApplicationArea = All;
+                }
+                field(Active; Rec.Active)
+                {
+                    ToolTip = 'Specifies if the SyncSet ist active or not.';
+                    ApplicationArea = All;
+                }
+                field(NOOfSyncSetTableFields; Rec.NOOfSyncSetTableFields)
+                {
+                    ToolTip = 'Shows the number of total active fields for this Sync. Set.';
+                    ApplicationArea = All;
+                }
+                field(NoOfSyncFields; Rec.NoOfSyncFields)
+                {
+                    ToolTip = 'Shows the number of total active fields.';
+                    ApplicationArea = All;
+                }
+            }
+            part(TargetCompany; ibsSyncSetTargetCompanySub)
+            {
+                ApplicationArea = All;
+                Caption = 'Targets';
+                SubPageLink = SyncSetCode = field(Code);
+            }
+            part(SyncFields; ibsSyncSetTableSub)
+            {
+                ApplicationArea = All;
+                Caption = 'Tables';
+                SubPageLink = SyncSetCode = field(Code);
+            }
+        }
+    }
+}
+table 70108 ibsSyncSetField
+{
+    DataClassification = CustomerContent;
+    fields
+    {
+        field(1; SyncSetCode; Code[50])
+        {
+            Caption = 'Sync. Set Code';
+            DataClassification = CustomerContent;
+            TableRelation = ibsSyncSet.Code;
+        }
+        field(2; SyncFieldEntryNo; Integer)
+        {
+            Caption = 'Sync. Field Entry No.';
+            DataClassification = SystemMetadata;
+            TableRelation = ibsSyncField.EntryNo;
+        }
+    }
+    keys
+    {
+        key(PrimaryKey; SyncSetCode, SyncFieldEntryNo)
+        {
+            Clustered = true;
+        }
+    }
+}
+page 70109 ibsSyncSetList
+{
+    ApplicationArea = All;
+    Caption = 'Sync. Sets';
+    CardPageId = ibsSyncSetCard;
+    PageType = List;
+    SourceTable = ibsSyncSet;
+    UsageCategory = Lists;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field("Code"; Rec."Code")
+                {
+                    ToolTip = 'Specifies the value of the Code field.';
+                    ApplicationArea = All;
+                }
+                field(Description; Rec.Description)
+                {
+                    ToolTip = 'Specifies the value of the Description field.';
+                    ApplicationArea = All;
+                }
+            }
+        }
+    }
+}
+table 70109 ibsSyncSetTable
+{
+    DataClassification = CustomerContent;
+    fields
+    {
+        field(1; SyncSetCode; Code[50])
+        {
+            NotBlank = true;
+            Caption = 'Sync. Set Code';
+            DataClassification = CustomerContent;
+        }
+        field(2; TableID; Integer)
+        {
+            NotBlank = true;
+            Caption = 'Table ID';
+            DataClassification = SystemMetadata;
+            trigger OnValidate()
+            var
+                SystemTableNotAllowedErr: Label 'System tables are not allowed for synchronization.';
+            begin
+                if Rec.TableID >= 2000000000 then
+                    Error(SystemTableNotAllowedErr);
+                CheckTableID(TableID);
+            end;
+        }
+        field(3; NoOfFields; Integer)
+        {
+            FieldClass = FlowField;
+            CalcFormula = count(ibsSyncSetTableField where(SyncSetCode = field(SyncSetCode), TableID = field(TableID)));
+            Editable = false;
+            Caption = 'No. of Fields';
+        }
+        field(4; TableCaption; Text[249])
+        {
+            FieldClass = FlowField;
+            CalcFormula = lookup(AllObjWithCaption."Object Caption" where("Object Type" = const(Table), "Object ID" = field(TableID)));
+            Editable = false;
+            Caption = 'Table Caption';
+        }
+        field(5; NoOfFilter; Integer)
+        {
+            FieldClass = FlowField;
+            CalcFormula = count(ibsSyncSetTableFilter where(SyncSetCode = field(SyncSetCode), TableID = field(TableID)));
+            Editable = false;
+            Caption = 'No. of Filters';
+        }
+        field(6; ExecuteOnInsert; Boolean)
+        {
+            Caption = 'OnInsert', Locked = true;
+            DataClassification = SystemMetadata;
+        }
+        field(7; ExecuteOnModify; Boolean)
+        {
+            Caption = 'OnModify', Locked = true;
+            DataClassification = SystemMetadata;
+        }
+        field(8; ExecuteOnDelete; Boolean)
+        {
+            Caption = 'OnDelete', Locked = true;
+            DataClassification = SystemMetadata;
+        }
+    }
+    keys
+    {
+        key(PrimaryKey; SyncSetCode, TableID)
+        {
+            Clustered = true;
+        }
+    }
+    trigger OnDelete()
+    var
+        SyncSetTableField: Record ibsSyncSetTableField;
+    begin
+        SyncSetTableField.SetRange(SyncSetCode, Rec.SyncSetCode);
+        SyncSetTableField.SetRange(TableID, Rec.TableID);
+        SyncSetTableField.DeleteAll(true);
+    end;
+    [NonDebuggable]
+    local procedure CheckTableID(TableIDToCheck: Integer)
+    var
+        SyncEventHandler: Codeunit ibsSyncEventHandler;
+        ExludedTableUserMsg: Label 'The table "%1" is not allowed by %2!', Comment = '%1 = TableCaption, %2 = reason/source';
+        ExcludedByDesignMsgLbl: Label 'design';
+        ExcludedByLicenseMsgLbl: Label 'license';
+        ExcludedByPermissionMsgLbl: Label 'your effective permission';
+    begin
+        if SyncEventHandler.IsExcludedTable(TableIDToCheck) then begin
+            CalcFields(TableCaption);
+            Error(ExludedTableUserMsg, TableCaption, ExcludedByDesignMsgLbl);
+        end;
+        if not SyncEventHandler.CheckLicense(TableIDToCheck) then
+            Error(ExludedTableUserMsg, TableCaption, ExcludedByLicenseMsgLbl);
+        if not SyncEventHandler.HasPermission(TableIDToCheck) then
+            Error(ExludedTableUserMsg, TableCaption, ExcludedByPermissionMsgLbl);
+    end;
+}
+table 70110 ibsSyncSetTableField
+{
+    DataClassification = CustomerContent;
+    DrillDownPageId = ibsSyncSetTableFieldList;
+    LookupPageId = ibsSyncSetTableFieldList;
+    fields
+    {
+        field(1; SyncSetCode; Code[50])
+        {
+            NotBlank = true;
+            Caption = 'Sync. Set Code';
+            DataClassification = CustomerContent;
+        }
+        field(2; TableID; Integer)
+        {
+            NotBlank = true;
+            Caption = 'Table ID';
+            DataClassification = SystemMetadata;
+            TableRelation = AllObjWithCaption."Object ID" where("Object Type" = const(TableData));
+            trigger OnValidate()
+            var
+                SystemTableNotAllowedErr: Label 'System tables are not allowed for synchronization.';
+            begin
+                if Rec.TableID >= 2000000000 then
+                    Error(SystemTableNotAllowedErr);
+            end;
+        }
+        field(3; FieldNo; Integer)
+        {
+            NotBlank = true;
+            Caption = 'Field No.';
+            DataClassification = SystemMetadata;
+            TableRelation = Field."No." where(TableNo = field(TableID));
+            trigger OnValidate()
+            var
+                SystemFieldNotAllowedErr: Label 'System fields are not allowed for synchronization.';
+            begin
+                if Rec.FieldNo >= 2000000000 then
+                    Error(SystemFieldNotAllowedErr);
+            end;
+        }
+        field(4; DataTransformationRuleCode; Code[20])
+        {
+            Caption = 'Data Transformation Rule';
+            DataClassification = CustomerContent;
+            TableRelation = ibsDataTransformationRule;
+        }
+        field(5; TableCaption; Text[249])
+        {
+            FieldClass = FlowField;
+            CalcFormula = lookup(AllObjWithCaption."Object Caption" where("Object Type" = const(Table), "Object ID" = field(TableID)));
+            Editable = false;
+            Caption = 'Table Caption';
+        }
+        field(6; FieldCaption; Text[249])
+        {
+            FieldClass = FlowField;
+            CalcFormula = lookup(Field."Field Caption" where(TableNo = field(TableID), "No." = field(FieldNo)));
+            Editable = false;
+            Caption = 'Field Caption';
+        }
+        field(7; ExecuteOnValidate; Boolean)
+        {
+            Caption = 'OnValidate', Locked = true;
+            DataClassification = SystemMetadata;
+        }
+    }
+    keys
+    {
+        key(PrimaryKey; SyncSetCode, TableID, FieldNo)
+        {
+            Clustered = true;
+        }
+    }
+    trigger OnInsert()
+    begin
+        if (SyncSetCode <> '') and (TableID <> 0) and (FieldNo <> 0) then
+            AddField(SyncSetCode, TableID, FieldNo, DataTransformationRuleCode);
+    end;
+    trigger OnModify()
+    begin
+        UpdateSyncField(Rec, xRec);
+    end;
+    trigger OnDelete()
+    begin
+        RemoveField(SyncSetCode, TableID, FieldNo);
+    end;
+    trigger OnRename()
+    begin
+        UpdateSyncField(Rec, xRec);
+    end;
+    [NonDebuggable]
+    local procedure UpdateSyncField(SyncSetTableField: Record ibsSyncSetTableField; xSyncSetTableField: Record ibsSyncSetTableField)
+    begin
+        if (SyncSetTableField.SyncSetCode <> xSyncSetTableField.SyncSetCode) or
+            (SyncSetTableField.TableID <> xSyncSetTableField.TableID) or
+            (SyncSetTableField.FieldNo <> xSyncSetTableField.FieldNo) or
+            (SyncSetTableField.DataTransformationRuleCode <> xSyncSetTableField.DataTransformationRuleCode) then begin
+            RemoveField(xSyncSetTableField.SyncSetCode, xSyncSetTableField.TableID, xSyncSetTableField.FieldNo);
+            AddField(SyncSetTableField.SyncSetCode, SyncSetTableField.TableID, SyncSetTableField.FieldNo, SyncSetTableField.DataTransformationRuleCode);
+        end;
+    end;
+    [NonDebuggable]
+    procedure AddField()
+    begin
+        AddField(Rec);
+    end;
+    [NonDebuggable]
+    procedure AddField(SyncSetTableField: Record ibsSyncSetTableField)
+    begin
+        AddField(SyncSetTableField.SyncSetCode, SyncSetTableField.TableID, SyncSetTableField.FieldNo, SyncSetTableField.DataTransformationRuleCode);
+    end;
+    [NonDebuggable]
+    procedure AddField(AddToSyncSetCode: Code[50]; CurrTableID: Integer; NewFieldNo: Integer; NewDataTransformationRuleCode: Code[20])
+    var
+        SyncField: Record ibsSyncField;
+        SyncSetField: Record ibsSyncSetField;
+    begin
+        SyncField.LoadFields(EntryNo);
+        SyncField.SetRange(TableID, CurrTableID);
+        SyncField.SetRange(FieldNo, NewFieldNo);
+        if not SyncField.FindFirst() then begin
+            SyncField.Init();
+            SyncField.TableID := CurrTableID;
+            SyncField.FieldNo := NewFieldNo;
+            SyncField.GlobalDataTransformRuleCode := NewDataTransformationRuleCode;
+            SyncField.Insert(false);
+        end;
+        SyncField.FindFirst();
+        SyncSetField.Init();
+        SyncSetField.SyncSetCode := AddToSyncSetCode;
+        SyncSetField.SyncFieldEntryNo := SyncField.EntryNo;
+        if SyncSetField.Insert(false) then;
+    end;
+    [NonDebuggable]
+    procedure RemoveField()
+    begin
+        RemoveField(Rec);
+    end;
+    [NonDebuggable]
+    procedure RemoveField(var SyncSetTableField: Record ibsSyncSetTableField)
+    begin
+        RemoveField(SyncSetTableField.SyncSetCode, SyncSetTableField.TableID, SyncSetTableField.FieldNo);
+    end;
+    [NonDebuggable]
+    procedure RemoveField(RemoveFromSyncSetCode: Code[50]; CurrTableID: Integer; RemoveFieldNo: Integer)
+    var
+        SyncField: Record ibsSyncField;
+        SyncSetField: Record ibsSyncSetField;
+    begin
+        SyncField.LoadFields(EntryNo);
+        SyncField.SetRange(TableID, CurrTableID);
+        SyncField.SetRange(FieldNo, RemoveFieldNo);
+        SyncField.FindFirst();
+        SyncSetField.SetFilter(SyncSetCode, '<>%1', RemoveFromSyncSetCode);
+        SyncSetField.SetRange(SyncFieldEntryNo, SyncField.EntryNo);
+        if SyncSetField.IsEmpty() then
+            SyncField.DeleteAll();
+        SyncSetField.Reset();
+        SyncSetField.SyncSetCode := RemoveFromSyncSetCode;
+        SyncSetField.SyncFieldEntryNo := SyncField.EntryNo;
+        if SyncSetField.Delete(false) then; 
+    end;
+}
+page 70113 ibsSyncSetTableFieldList
+{
+    ApplicationArea = All;
+    Caption = 'Sync. Set Table Fields';
+    PageType = List;
+    SourceTable = ibsSyncSetTableField;
+    UsageCategory = Lists;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field(SyncSetCode; Rec.SyncSetCode)
+                {
+                    ToolTip = 'Specifies the value of the Sync. Set Code field.';
+                    ApplicationArea = All;
+                    Visible = false;
+                }
+                field(TableID; Rec.TableID)
+                {
+                    ToolTip = 'Specifies the value of the Table ID field.';
+                    ApplicationArea = All;
+                    Visible = false;
+                }
+                field(TableCaption; Rec.TableCaption)
+                {
+                    ToolTip = 'Specifies the value of the Table Caption field.';
+                    ApplicationArea = All;
+                    Visible = false;
+                }
+                field(FieldNo; Rec.FieldNo)
+                {
+                    ToolTip = 'Specifies the value of the Field No. field.';
+                    ApplicationArea = All;
+                    trigger OnLookup(var Text: Text): Boolean
+                    var
+                        SelectedField: Record Field;
+                        FieldSelection: Codeunit "Field Selection";
+                    begin
+                        Rec.TestField(TableID);
+                        SelectedField.SetRange(TableNo, Rec.TableID);
+                        SelectedField.SetFilter("No.", '<%1', 2000000000);
+                        if FieldSelection.Open(SelectedField) then
+                            Rec.FieldNo := SelectedField."No.";
+                    end;
+                }
+                field(FieldCaption; Rec.FieldCaption)
+                {
+                    ToolTip = 'Specifies the value of the Table Caption field.';
+                    ApplicationArea = All;
+                }
+                field(DataTransformationRuleCode; Rec.DataTransformationRuleCode)
+                {
+                    ToolTip = 'Specifies the value of the Table Caption field.';
+                    ApplicationArea = All;
+                }
+                field(ExecuteOnValidate; Rec.ExecuteOnValidate)
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies if the OnValidate() trigger is executed on target.';
+                }
+            }
+        }
+    }
+    actions
+    {
+        area(Navigation)
+        {
+            action(TargetCompanyTransformationRules)
+            {
+                ApplicationArea = All;
+                Caption = 'Target Company Transformation Rules';
+                Image = CheckRulesSyntax;
+                Promoted = true;
+                PromotedIsBig = true;
+                PromotedOnly = true;
+                RunObject = page ibsTargetCompanyDataTransforms;
+                RunPageLink = TableID = field(TableID), FieldNo = field(FieldNo);
+                ToolTip = 'Definie individual rules per target company.';
+            }
+            action(TargetCompanyFitlerRules)
+            {
+                ApplicationArea = All;
+                Caption = 'Target Company Filter Rules';
+                Image = FilterLines;
+                Promoted = true;
+                PromotedIsBig = true;
+                PromotedOnly = true;
+                RunObject = page ibsSyncSetTableFilterList;
+                RunPageLink = SyncSetCode = field(SyncSetCode), TableID = field(TableID), FieldNo = field(FieldNo);
+                ToolTip = 'Definie individual rules per target company.';
+            }
+        }
+    }
+}
+table 70105 ibsSyncSetTableFilter
+{
+    Caption = 'SyncSet Table Filter';
+    DataClassification = CustomerContent;
+    LookupPageId = ibsSyncSetTableFilterList;
+    DrillDownPageId = ibsSyncSetTableFilterList;
+    fields
+    {
+        field(1; SyncSetCode; Code[50])
+        {
+            NotBlank = true;
+            Caption = 'Sync. Set Code';
+            DataClassification = CustomerContent;
+            TableRelation = ibsSyncSet.Code;
+        }
+        field(2; TargetCompanyCode; Code[50])
+        {
+            Caption = 'Target Company Code';
+            DataClassification = CustomerContent;
+            TableRelation = ibsSyncTargetCompany;
+        }
+        field(3; TableID; Integer)
+        {
+            NotBlank = true;
+            Caption = 'Table ID';
+            DataClassification = SystemMetadata;
+        }
+        field(4; FieldNo; Integer)
+        {
+            NotBlank = true;
+            Caption = 'Field No.';
+            DataClassification = SystemMetadata;
+        }
+        field(5; FilterString; Text[2048])
+        {
+            NotBlank = true;
+            Caption = 'Filter String';
+            DataClassification = CustomerContent;
+        }
+        field(6; TableCaption; Text[249])
+        {
+            FieldClass = FlowField;
+            CalcFormula = lookup(AllObjWithCaption."Object Caption" where("Object Type" = const(Table), "Object ID" = field(TableID)));
+            Editable = false;
+            Caption = 'Table Caption';
+        }
+        field(7; FieldCaption; Text[249])
+        {
+            FieldClass = FlowField;
+            CalcFormula = lookup(Field."Field Caption" where(TableNo = field(TableID), "No." = field(FieldNo)));
+            Editable = false;
+            Caption = 'Field Caption';
+        }
+    }
+    keys
+    {
+        key(PrimaryKey; SyncSetCode, TargetCompanyCode, TableID, FieldNo)
+        {
+            Clustered = true;
+        }
+    }
+}
+page 70118 ibsSyncSetTableFilterList
+{
+    ApplicationArea = All;
+    Caption = 'SyncSet Table Filter';
+    PageType = List;
+    SourceTable = ibsSyncSetTableFilter;
+    UsageCategory = Administration;
+    PopulateAllFields = true;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field(SyncSetCode; Rec.SyncSetCode)
+                {
+                    ToolTip = 'Specifies the value of the Sync. Set Code field.';
+                    ApplicationArea = All;
+                    Visible = false;
+                }
+                field(TargetCompanyCode; Rec.TargetCompanyCode)
+                {
+                    ToolTip = 'Specifies the value of the Target Company Code field.';
+                    ApplicationArea = All;
+                }
+                field(TableID; Rec.TableID)
+                {
+                    ToolTip = 'Specifies the value of the Table ID field.';
+                    ApplicationArea = All;
+                    Visible = false;
+                }
+                field(TableCaption; Rec.TableCaption)
+                {
+                    ToolTip = 'Specifies the value of the Table Caption field.';
+                    ApplicationArea = All;
+                }
+                field(FieldNo; Rec.FieldNo)
+                {
+                    ToolTip = 'Specifies the value of the Field No. field.';
+                    ApplicationArea = All;
+                }
+                field(FieldCaption; Rec.FieldCaption)
+                {
+                    ToolTip = 'Specifies the value of the Field Caption field.';
+                    ApplicationArea = All;
+                }
+                field(FilterString; Rec.FilterString)
+                {
+                    ToolTip = 'Specifies the value of the Filter String field.';
+                    ApplicationArea = All;
+                }
+            }
+        }
+    }
+    //                 Ok1 := Rec.ApplySyncFilter(RecordId, 2, '10000'); 
+    //                 Ok2 := Rec.ApplySyncFilter(RecordId, 2, '50000'); 
+}
+page 70112 ibsSyncSetTableSub
+{
+    Caption = 'Sync. Set Tables';
+    PageType = ListPart;
+    SourceTable = ibsSyncSetTable;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field(SyncSetCode; Rec.SyncSetCode)
+                {
+                    ToolTip = 'Specifies the value of the Sync. Set Code field.';
+                    ApplicationArea = All;
+                    Caption = 'Code';
+                    Visible = false;
+                }
+                field(TableID; Rec.TableID)
+                {
+                    ToolTip = 'Specifies the value of the Table ID field.';
+                    Caption = 'ID';
+                    ApplicationArea = All;
+                }
+                field(TableCaption; Rec.TableCaption)
+                {
+                    Caption = 'Caption';
+                    ToolTip = 'Specifies the value of the Table Caption field.';
+                    ApplicationArea = All;
+                }
+                field(NoOfFields; Rec.NoOfFields)
+                {
+                    ToolTip = 'No. of Fields';
+                    Caption = 'No. of Fields';
+                    ApplicationArea = All;
+                }
+                field(NoOfFilter; Rec.NoOfFilter)
+                {
+                    ToolTip = 'No. of Filters';
+                    Caption = 'No. of Filters';
+                    ApplicationArea = All;
+                }
+                field(OnInsert; Rec.ExecuteOnInsert)
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies if the OnInsert() trigger is executed on target.';
+                }
+                field(OnModify; Rec.ExecuteOnModify)
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies if the OnModify() trigger is executed on target.';
+                }
+                field(OnDelete; Rec.ExecuteOnDelete)
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies if the OnDelete() trigger is executed on target.';
+                }
+            }
+        }
+    }
+}
+table 70102 ibsSyncSetTargetCompany
+{
+    Caption = 'Sync. Set Target Company';
+    DataClassification = CustomerContent;
+    LookupPageId = ibsSyncSetTargetCompanyList;
+    DrillDownPageId = ibsSyncSetTargetCompanyList;
+    fields
+    {
+        field(1; SyncSetCode; Code[50])
+        {
+            NotBlank = true;
+            Caption = 'Sync. Set Code';
+            DataClassification = SystemMetadata;
+            TableRelation = ibsSyncSet.Code;
+        }
+        field(2; TargetCompanyCode; Code[50])
+        {
+            NotBlank = true;
+            Caption = 'Target Company Code';
+            DataClassification = CustomerContent;
+            TableRelation = ibsSyncTargetCompany.Code;
+            trigger OnValidate()
+            var
+                TargetCompany: Record ibsSyncTargetCompany;
+                LicenseIsInvalidErr: Label 'License is invalid!';
+            begin
+                TargetCompany.Get(TargetCompanyCode);
+                if not TargetCompany.TestLicense() then
+                    Message(LicenseIsInvalidErr); 
+            end;
+        }
+    }
+    keys
+    {
+        key(PrimaryKey; SyncSetCode, TargetCompanyCode)
+        {
+            Clustered = true;
+        }
+    }
+}
+page 70104 ibsSyncSetTargetCompanyList
+{
+    ApplicationArea = All;
+    Caption = 'Sync. Set Target Company';
+    PageType = List;
+    SourceTable = ibsSyncSetTargetCompany;
+    UsageCategory = Administration;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field(SyncSetCode; Rec.SyncSetCode)
+                {
+                    ToolTip = 'Specifies the value of the Synchronization Entry No. field.';
+                    ApplicationArea = All;
+                    TableRelation = ibsSyncSet.Code;
+                }
+                field(TargetCompanyCode; Rec.TargetCompanyCode)
+                {
+                    ToolTip = 'Specifies the value of the Target Company field.';
+                    ApplicationArea = All;
+                    TableRelation = ibsSyncTargetCompany.Code;
+                }
+            }
+        }
+    }
+}
+page 70111 ibsSyncSetTargetCompanySub
+{
+    Caption = 'SyncSetTargetCompanySub';
+    PageType = ListPart;
+    SourceTable = ibsSyncSetTargetCompany;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field(SyncSetCode; Rec.SyncSetCode)
+                {
+                    ToolTip = 'Specifies the value of the Synchronization Entry No. field.';
+                    ApplicationArea = All;
+                    Visible = false;
+                }
+                field(TargetCompanyCode; Rec.TargetCompanyCode)
+                {
+                    ToolTip = 'Specifies the value of the Target Company field.';
+                    Caption = 'Code';
+                    ApplicationArea = All;
+                }
+            }
+        }
+    }
+}
+table 70113 ibsDataTransformationRule
+{
+    Caption = 'Data Transformation Rule';
+    DataClassification = CustomerContent;
+    LookupPageId = ibsDataTransformationRules;
+    DrillDownPageId = ibsDataTransformationRules;
+    fields
+    {
+        field(1; Code; Code[20])
+        {
+            Caption = 'Code';
+            DataClassification = CustomerContent;
+        }
+        field(2; Description; Text[100])
+        {
+            Caption = 'Description';
+            DataClassification = CustomerContent;
+        }
+        field(3; Type; Enum ibsDataTransformationType)
+        {
+            Caption = 'Type';
+            DataClassification = SystemMetadata;
+        }
+        field(4; Value; Text[100])
+        {
+            Caption = 'Value';
+            DataClassification = CustomerContent;
+            trigger OnValidate()
+            begin
+                case Type of
+                    ibsDataTransformationType::Calculate:
+                        if Value = '/0' then
+                            Error('Division by zero!');
+                    ibsDataTransformationType::Convert:
+                        if ((StrLen(Value) mod 2) <> 1) then
+                            Error('Invalid convert format!');
+                    ibsDataTransformationType::Replace:
+                        Error('You must add replace rules in the "Data Transform Replace Rules" table!');
+                end;
+            end;
+        }
+    }
+    keys
+    {
+        key(PK; Code)
+        {
+            Clustered = true;
+        }
+    }
+    trigger OnDelete()
+    var
+        DataTransformReplaceRules: Record ibsDataTransformReplaceRules;
+    begin
+        DataTransformReplaceRules.SetFilter(DataTransformationRuleCode, Rec.Code);
+        DataTransformReplaceRules.DeleteAll(true);
+    end;
+}
+page 70115 ibsDataTransformationRules
+{
+    ApplicationArea = All;
+    Caption = 'Data Transformation Rules';
+    PageType = List;
+    SourceTable = ibsDataTransformationRule;
+    UsageCategory = Administration;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field("Code"; Rec."Code")
+                {
+                    ToolTip = 'Specifies the value of the Code field.';
+                    ApplicationArea = All;
+                }
+                field(Description; Rec.Description)
+                {
+                    ToolTip = 'Specifies the value of the Description field.';
+                    ApplicationArea = All;
+                }
+                field("Type"; Rec."Type")
+                {
+                    ToolTip = 'Specifies the value of the Type field.';
+                    ApplicationArea = All;
+                    trigger OnValidate()
+                    begin
+                        ValueEditable := Rec.Type <> Rec.Type::Replace;
+                    end;
+                }
+                field("Value"; Rec."Value")
+                {
+                    ToolTip = 'Specifies the value of the Value field.';
+                    ApplicationArea = All;
+                    Editable = ValueEditable;
+                }
+            }
+        }
+    }
+    actions
+    {
+        area(Navigation)
+        {
+            action(TransformationRules)
+            {
+                ApplicationArea = All;
+                Image = CheckRulesSyntax;
+                RunObject = page ibsDataTransfReplaceRulesList;
+                RunPageLink = DataTransformationRuleCode = field(Code);
+                ToolTip = 'Edit transformation details';
+            }
+        }
+    }
+    var
+        ValueEditable: Boolean;
+}
+enum 70102 ibsDataTransformationType
+{
+    Extensible = false;
+    value(0; Replace)
+    {
+        Caption = 'Replace';
+    }
+    value(1; Convert)
+    {
+        Caption = 'Convert';
+    }
+    value(2; Calculate)
+    {
+        Caption = 'Calculate';
+    }
+}
+table 70114 ibsDataTransformReplaceRules
+{
+    Caption = 'Replace Rule';
+    DataClassification = CustomerContent;
+    LookupPageId = ibsDataTransfReplaceRulesList;
+    DrillDownPageId = ibsDataTransfReplaceRulesList;
+    fields
+    {
+        field(1; DataTransformationRuleCode; Code[20])
+        {
+            Caption = 'Data Transformation Rule Code';
+            DataClassification = CustomerContent;
+            TableRelation = ibsDataTransformationRule.Code;
+        }
+        field(2; FromValue; Text[2048])
+        {
+            Caption = 'From Value';
+            DataClassification = CustomerContent;
+        }
+        field(3; ToValue; Text[2048])
+        {
+            Caption = 'To Value';
+            DataClassification = CustomerContent;
+        }
+    }
+    keys
+    {
+        key(PK; DataTransformationRuleCode, FromValue)
+        {
+            Clustered = true;
+        }
+    }
+}
+page 70114 ibsDataTransfReplaceRulesList
+{
+    ApplicationArea = All;
+    Caption = 'Replace Rules';
+    PageType = List;
+    PopulateAllFields = true;
+    SourceTable = ibsDataTransformReplaceRules;
+    UsageCategory = Administration;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field(DataTransformationRuleCode; Rec.DataTransformationRuleCode)
+                {
+                    ToolTip = 'Specifies the value of the Data Transformation Rule Code field.';
+                    ApplicationArea = All;
+                }
+                field(FromValue; Rec.FromValue)
+                {
+                    ToolTip = 'Specifies the value of the From Value field.';
+                    ApplicationArea = All;
+                }
+                field(ToValue; Rec.ToValue)
+                {
+                    ToolTip = 'Specifies the value of the To Value field.';
+                    ApplicationArea = All;
+                }
+            }
+        }
+    }
+}
+table 70112 ibsTargetCompanyDataTransform
+{
+    Caption = 'Target Company Transformation Rule';
+    DataClassification = CustomerContent;
+    LookupPageId = ibsTargetCompanyDataTransforms;
+    DrillDownPageId = ibsTargetCompanyDataTransforms;
+    fields
+    {
+        field(1; TableID; Integer)
+        {
+            Caption = 'Table ID';
+            DataClassification = SystemMetadata;
+        }
+        field(2; FieldNo; Integer)
+        {
+            Caption = 'Field No.';
+            DataClassification = SystemMetadata;
+        }
+        field(3; TargetCompany; Code[50])
+        {
+            Caption = 'Target Company';
+            DataClassification = CustomerContent;
+            TableRelation = ibsSyncTargetCompany.Code;
+        }
+        field(4; DataTransformationRuleCode; Code[20])
+        {
+            Caption = 'Data Transformation Rule';
+            DataClassification = CustomerContent;
+            TableRelation = ibsDataTransformationRule.Code;
+        }
+    }
+    keys
+    {
+        key(PrimaryKey; TableID, FieldNo, TargetCompany)
+        {
+            Clustered = true;
+        }
+    }
+}
+page 70116 ibsTargetCompanyDataTransforms
+{
+    ApplicationArea = All;
+    Caption = 'TargetCompanyDataTransforms';
+    PageType = List;
+    SourceTable = ibsTargetCompanyDataTransform;
+    UsageCategory = Administration;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field(TableID; Rec.TableID)
+                {
+                    ToolTip = 'Specifies the value of the Table ID field.';
+                    ApplicationArea = All;
+                }
+                field(FieldNo; Rec.FieldNo)
+                {
+                    ToolTip = 'Specifies the value of the Field No. field.';
+                    ApplicationArea = All;
+                }
+                field(TargetCompany; Rec.TargetCompany)
+                {
+                    ToolTip = 'Specifies the value of the Target Company field.';
+                    ApplicationArea = All;
+                }
+                field(DataTransformationRuleCode; Rec.DataTransformationRuleCode)
+                {
+                    ToolTip = 'Specifies the value of the Data Transformation Rule field.';
+                    ApplicationArea = All;
+                }
+            }
+        }
+    }
+}
+page 70121 ibsCompanySyncSetup
+{
+    Caption = 'Company Sync. Setup';
+    PageType = Card;
+    ApplicationArea = All;
+    UsageCategory = Administration;
+    SourceTable = ibsCompanySyncSetup;
+    InsertAllowed = false;
+    DeleteAllowed = false;
+    layout
+    {
+        area(Content)
+        {
+            group(GroupName)
+            {
+                field(ApiEndpointBaseUrl; Rec.ApiEndpointBaseUrl)
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the API endpoint URL for the current database. This is appended to outgoing transactions to inform the destination of the address for status feedback.';
+                }
+                field(OutgoingRequestAcceptLanguage; Rec.OutgoingRequestAcceptLanguage)
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the expected language code used in this company. Synchronization targets interpret the incoming source data in the language selected here.';
+                }
+            }
+        }
+    }
+    trigger OnOpenPage()
+    begin
+        Rec.Reset();
+        if not Rec.Get() then begin
+            Rec.Init();
+            Rec.Insert();
+        end;
+    end;
+}
+table 70117 ibsCompanySyncSetup
+{
+    DataClassification = CustomerContent;
+    fields
+    {
+        field(1; PrimaryKey; Code[10])
+        {
+            Caption = 'PrimaryKey';
+            DataClassification = CustomerContent;
+        }
+        field(3; ApiEndpointBaseUrl; Text[1024])
+        {
+            Caption = 'API Endpoint BaseURL';
+            DataClassification = CustomerContent;
+            trigger OnValidate()
+            begin
+                if ApiEndpointBaseUrl[StrLen(ApiEndpointBaseUrl)] = '/' then
+                    ApiEndpointBaseUrl := CopyStr(ApiEndpointBaseUrl, 1, StrLen(ApiEndpointBaseUrl) - 1);
+            end;
+        }
+        field(99; OutgoingRequestAcceptLanguage; Text[10])
+        {
+            Caption = 'Outgoing Request Content-Language';
+            DataClassification = CustomerContent;
+        }
+    }
+    keys
+    {
+        key(PK; PrimaryKey)
+        {
+            Clustered = true;
+        }
+    }
+    [NonDebuggable]
+    procedure TestLicense(ConnectionString: Text; License: Text): Boolean
+    begin
+        exit(IsLicenseValid(ConnectionString, License));
+    end;
+    [NonDebuggable]
+    local procedure IsLicenseValid(LicenseIdentity: Text; LicenseData: Text): Boolean
+    var
+        [NonDebuggable]
+        Base64Convert: Codeunit "Base64 Convert";
+        [NonDebuggable]
+        CryptographyManagement: Codeunit "Cryptography Management";
+        [NonDebuggable]
+        ValidToDate: Date;
+        [NonDebuggable]
+        CompareLicenseData: Text;
+        [NonDebuggable]
+        ValidToDateText: Text;
+        [NonDebuggable]
+        LicenseDataText: Text;
+        [NonDebuggable]
+        Identity: Text;
+        [NonDebuggable]
+        PrivateKeyTok: Label 'iddqdidkfa', Locked = true;
+        [NonDebuggable]
+        HashAlgorithmType: Option HMACMD5,HMACSHA1,HMACSHA256,HMACSHA384,HMACSHA512;
+    begin
+        LicenseDataText := Base64Convert.FromBase64(LicenseData);
+        LicenseDataText := ConvertStr(LicenseDataText, '|', ',');
+        Identity := Base64Convert.FromBase64(SelectStr(1, LicenseDataText));
+        if (LicenseIdentity <> Identity) then
+            exit(false);
+        ValidToDateText := Base64Convert.FromBase64(SelectStr(2, LicenseDataText));
+        if not Evaluate(ValidToDate, ValidToDateText) then
+            exit(false);
+        if ValidToDate < Today() then
+            exit(false);
+        CompareLicenseData := Base64Convert.ToBase64(Identity);
+        CompareLicenseData += '|' + Base64Convert.ToBase64(Format(ValidToDate));
+        CompareLicenseData += '|' + CryptographyManagement.GenerateBase64KeyedHash(Identity + Format(ValidToDate), Base64Convert.ToBase64(PrivateKeyTok), HashAlgorithmType::HMACSHA384);
+        CompareLicenseData := Base64Convert.ToBase64(CompareLicenseData);
+        exit(LicenseData = CompareLicenseData);
+    end;
+}
+table 70100 ibsSyncField
+{
+    Caption = 'Sync. Field';
+    DataClassification = SystemMetadata;
+    LookupPageId = ibsSyncFieldList;
+    DrillDownPageId = ibsSyncFieldList;
+    fields
+    {
+        field(1; TableID; Integer)
+        {
+            Caption = 'Table ID';
+            DataClassification = SystemMetadata;
+        }
+        field(2; FieldNo; Integer)
+        {
+            Caption = 'Field No.';
+            DataClassification = SystemMetadata;
+        }
+        field(3; EntryNo; Integer)
+        {
+            AutoIncrement = true;
+            Caption = 'Entry No.';
+            DataClassification = SystemMetadata;
+        }
+        field(5; GlobalDataTransformRuleCode; Code[20])
+        {
+            Caption = 'Data Transformation Rule';
+            DataClassification = CustomerContent;
+            TableRelation = ibsDataTransformationRule.Code;
+        }
+    }
+    keys
+    {
+        key(PrimaryKey; EntryNo)
+        {
+            Clustered = true;
+        }
+        key(TableField; TableID, FieldNo)
+        {
+            Unique = true;
+        }
+    }
+}
+page 70102 ibsSyncFieldList
+{
+    ApplicationArea = All;
+    Caption = 'Sync. Field';
+    PageType = List;
+    SourceTable = ibsSyncField;
+    UsageCategory = Administration;
+    InsertAllowed = false;
+    ModifyAllowed = false;
+    DeleteAllowed = false;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field(TableID; Rec.TableID)
+                {
+                    ToolTip = 'Specifies the value of the Table ID field.';
+                    ApplicationArea = All;
+                }
+                field(FieldNo; Rec.FieldNo)
+                {
+                    ToolTip = 'Specifies the value of the Field No. field.';
+                    ApplicationArea = All;
+                }
+            }
+        }
+    }
+}
+page 70119 ibsSyncInputTextDialog
+{
+    PageType = StandardDialog;
+    ApplicationArea = All;
+    UsageCategory = Administration;
+    layout
+    {
+        area(Content)
+        {
+            group(GroupName)
+            {
+                field(Name; InputValue)
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Your value';
+                    Caption = 'Value';
+                }
+            }
+        }
+    }
+    var
+        PageCaption: Text;
+        InputValue: Text;
+    trigger OnOpenPage()
+    var
+        DialogPageCaptionUndefinedLbl: Label 'Undefined';
+    begin
+        if PageCaption = '' then
+            PageCaption := DialogPageCaptionUndefinedLbl;
+        CurrPage.Caption(PageCaption);
+    end;
+    procedure SetCaption(NewCaption: Text)
+    begin
+        PageCaption := NewCaption;
+    end;
+    procedure GetValue(): Text
+    begin
+        exit(InputValue);
+    end;
+}
+page 70103 ibsSyncTargetCompany
+{
+    ApplicationArea = All;
+    Caption = 'Sync. Target Company';
+    PageType = List;
+    SourceTable = ibsSyncTargetCompany;
+    UsageCategory = Administration;
+    layout
+    {
+        area(content)
+        {
+            repeater(General)
+            {
+                field("Code"; Rec."Code")
+                {
+                    ToolTip = 'Specifies the value of the Code field.';
+                    ApplicationArea = All;
+                }
+                field(BaseUrl; Rec.BaseUrl)
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the value of the Base URL field.';
+                }
+                field(TargetCompanyId; Rec.TargetCompanyId)
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the value of the Target Company ID field.';
+                }
+                field(NoOfSyncSets; Rec.NoOfSyncSets)
+                {
+                    ToolTip = 'Specifies the value of the No. of Sync. Sets field.';
+                    ApplicationArea = All;
+                }
+                field(ApiUserName; Rec.ApiUserName)
+                {
+                    ToolTip = 'Specifies the value of the API Username field.';
+                    ApplicationArea = All;
+                }
+            }
+        }
+    }
+    actions
+    {
+        area(Processing)
+        {
+            action(SetApiPassword)
+            {
+                ApplicationArea = All;
+                Caption = 'Set API password';
+                Image = EncryptionKeys;
+                Promoted = true;
+                PromotedCategory = Process;
+                PromotedIsBig = true;
+                PromotedOnly = true;
+                Scope = Repeater;
+                ToolTip = 'Set API password.';
+                trigger OnAction()
+                var
+                    ValueDialog: Page ibsSyncInputTextDialog;
+                    EncryptedApiPassword: Text;
+                    EncryptionFailedMaxStrLenErr: Label 'Encryption failed. Reason: MaxStrLen()';
+                begin
+                    ValueDialog.Caption('Set Password');
+                    if ValueDialog.RunModal() = Action::OK then
+                        //IsolatedStorage.SetEncrypted(Rec.IsolatedStoragePasswordKey(), ValueDialog.GetValue());
+                        if EncryptionEnabled() then begin
+                            EncryptedApiPassword := Encrypt(ValueDialog.GetValue());
+                            if StrLen(EncryptedApiPassword) <= MaxStrLen(Rec.ApiPassword) then
+#pragma warning disable AA0139
+                                Rec.ApiPassword := EncryptedApiPassword
+#pragma warning restore AA0139
+                            else
+                                Error(EncryptionFailedMaxStrLenErr);
+                        end else
+                            Error(EncryptionDisabledErr);
+                end;
+            }
+            action(SetApiLicense)
+            {
+                ApplicationArea = All;
+                Caption = 'Set API license';
+                Image = CreditCard;
+                Promoted = true;
+                PromotedCategory = Process;
+                PromotedIsBig = true;
+                PromotedOnly = true;
+                Scope = Repeater;
+                ToolTip = 'Set API license';
+                trigger OnAction()
+                var
+                    ValueDialog: Page ibsSyncInputTextDialog;
+                    ApiLicenseText: Text;
+                    LicenseImportFailedMaxStrLenErr: Label 'License import failed. Reason: MaxStrLen()';
+                begin
+                    ValueDialog.SetCaption('Import License');
+                    if ValueDialog.RunModal() = Action::OK then begin
+                        ApiLicenseText := ValueDialog.GetValue();
+                        if (StrLen(ApiLicenseText) <= MaxStrLen(rec.ApiLicense)) then
+#pragma warning disable AA0139
+                            Rec.ApiLicense := ApiLicenseText
+#pragma warning restore AA0139
+                        else
+                            Error(LicenseImportFailedMaxStrLenErr);
+                    end;
+                    //IsolatedStorage.Set(Rec.IsolatedStorageLicenseKey(), ValueDialog.GetValue());
+                end;
+            }
+            action(RequestApiLicense)
+            {
+                ApplicationArea = All;
+                Caption = 'Request API license';
+                Image = PostMail;
+                Promoted = true;
+                PromotedCategory = Process;
+                PromotedIsBig = true;
+                PromotedOnly = true;
+                Scope = Repeater;
+                ToolTip = 'Displays relevant information for your partner for license generation.';
+                trigger OnAction()
+                begin
+                    Rec.ShowApiUrl();
+                end;
+            }
+        }
+    }
+    var
+        EncryptionDisabledErr: Label 'Encryption is disabled. You have to enable encryption before using this feature!';
+}
+table 70101 ibsSyncTargetCompany
+{
+    Caption = 'Sync. Target Company';
+    DataClassification = CustomerContent;
+    LookupPageId = ibsSyncTargetCompany;
+    DrillDownPageId = ibsSyncTargetCompany;
+    fields
+    {
+        field(1; Code; Code[50])
+        {
+            Caption = 'Code';
+            DataClassification = CustomerContent;
+        }
+        field(2; TargetCompanyId; Guid)
+        {
+            Caption = 'Target Company ID';
+            DataClassification = SystemMetadata;
+        }
+        field(4; BaseUrl; Text[250])
+        {
+            Caption = 'Base URL';
+            DataClassification = CustomerContent;
+            trigger OnValidate()
+            begin
+                ValidateBaseUrl(BaseUrl);
+            end;
+        }
+        field(5; Active; Boolean)
+        {
+            Caption = 'Active';
+            DataClassification = SystemMetadata;
+        }
+        field(3; NoOfSyncSets; Integer)
+        {
+            FieldClass = FlowField;
+            CalcFormula = count(ibsSyncSetTargetCompany where(TargetCompanyCode = field(Code)));
+            Editable = false;
+            Caption = 'No. of Sync. Sets';
+        }
+        field(6; ApiLicense; Text[2048])
+        {
+            Caption = 'License';
+            DataClassification = SystemMetadata;
+        }
+        field(7; ApiUserName; Text[50])
+        {
+            Caption = 'API User Name';
+            DataClassification = CustomerContent;
+        }
+        field(8; ApiPassword; Text[2048])
+        {
+            Caption = 'API Password';
+            DataClassification = CustomerContent;
+            trigger OnValidate()
+            begin
+            end;
+        }
+    }
+    keys
+    {
+        key(PrimaryKey; Code)
+        {
+            Clustered = true;
+        }
+        key(BaseUrlSorting; BaseUrl)
+        { }
+    }
+    local procedure ValidateBaseUrl(BaseUrlToValidate: Text)
+    var
+        HttpsSchemeErrMsg: Label 'Invalid protocol!';
+    begin
+        if BaseUrlToValidate[StrLen(BaseUrlToValidate)] = '/' then
+            BaseUrlToValidate := CopyStr(BaseUrlToValidate, 1, StrLen(BaseUrlToValidate) - 1);
+        if StrPos(BaseUrlToValidate, 'https') <> 1 then
+            Message(HttpsSchemeErrMsg);
+    end;
+    [NonDebuggable]
+    procedure TestLicense(): Boolean
+    var
+        CompanySyncSetup: Record ibsCompanySyncSetup;
+    begin
+        exit(true);
+        TestField(ApiLicense);
+        exit(CompanySyncSetup.TestLicense(ApiUrl(), Rec.ApiLicense));
+    end;
+    procedure ApiUrl(): Text
+    var
+        Sync: Codeunit ibsSync;
+        ApiUrlTok: Label '%1/api/ibs/companysync/v2.0/companies(%2)/in', Locked = true, Comment = '%1 = base url, %2 = target company id';
+    begin
+        TestField(BaseUrl);
+        ValidateBaseUrl(BaseUrl);
+        TestField(TargetCompanyId);
+        exit(StrSubstNo(ApiUrlTok, BaseUrl, Sync.StripGuid(TargetCompanyId)));
+    end;
+    procedure BasicAccessAuthentication(): Text
+    var
+        Base64Convert: Codeunit "Base64 Convert";
+    begin
+        TestField(ApiUserName);
+        TestField(ApiPassword);
+        exit('Basic ' + Base64Convert.ToBase64(Rec.ApiUserName + ':' + Decrypt(Rec.ApiPassword)));
+    end;
+    procedure IsolatedStoragePasswordKey(): Text
+    begin
+        TestField(Code);
+        exit('CSYNC2' + Rec.Code + 'APIPASSWORD');
+    end;
+    procedure IsolatedStorageLicenseKey(): Text
+    begin
+        TestField(Code);
+        exit('CSYNC2' + Rec.Code + 'APILICENSE');
+    end;
+    procedure ShowApiUrl()
+    begin
+        Message(ApiUrl());
+    end;
+}
+codeunit 70105 ibsSyncOutgoingDebug
+{
+    procedure DebugSetStatusProcessing(var OutgoingRecord: Record ibsOutgoingRecord)
+    begin
+        OutgoingRecord.LastStatus := ibsSyncStatus::Processing;
+        OutgoingRecord.Modify(false);
+    end;
+    procedure DebugResetStatus(/*TransactionId: Guid;*/ StatusFilter: enum ibsSyncStatus)
+    var
+        OutgoingRecord: Record ibsOutgoingRecord;
+    begin
+        OutgoingRecord.SetLoadFields(LastStatus, LastStatusInfo);
+        OutgoingRecord.LockTable();
+        //OutgoingRecord.SetRange(); //TODO: enable reset by transaction
+        case StatusFilter of
+            ibsSyncStatus::Error:
+                begin
+                    OutgoingRecord.SetRange(LastStatus, ibsSyncStatus::Error);
+                    if OutgoingRecord.FindSet(true, false) then begin
+                        OutgoingRecord.ModifyAll(LastStatusInfo, '');
+                        OutgoingRecord.ModifyAll(LastStatus, ibsSyncStatus::Recorded, false);
+                        Commit();
+                    end;
+                end;
+            ibsSyncStatus::Processing:
+                begin
+                    OutgoingRecord.SetRange(LastStatus, ibsSyncStatus::Processing);
+                    if OutgoingRecord.FindSet(true, false) then begin
+                        OutgoingRecord.ModifyAll(LastStatusInfo, '');
+                        OutgoingRecord.ModifyAll(LastStatus, ibsSyncStatus::Recorded, false);
+                        Commit();
+                    end;
+                end;
+            ibsSyncStatus::AwaitFeedback:
+                begin
+                    OutgoingRecord.SetRange(LastStatus, ibsSyncStatus::AwaitFeedback);
+                    if OutgoingRecord.FindSet(true, false) then begin
+                        OutgoingRecord.ModifyAll(LastStatusInfo, '');
+                        OutgoingRecord.ModifyAll(LastStatus, ibsSyncStatus::Recorded, false);
+                        Commit();
+                    end;
+                end;
+            ibsSyncStatus::Completed:
+                begin
+                    OutgoingRecord.SetRange(LastStatus, ibsSyncStatus::Completed);
+                    if OutgoingRecord.FindSet(true, false) then begin
+                        OutgoingRecord.ModifyAll(LastStatusInfo, '');
+                        OutgoingRecord.ModifyAll(LastStatus, ibsSyncStatus::Recorded, false);
+                        Commit();
+                    end;
+                end;
+        end;
+    end;
+    procedure ShowLastOutgoingJsonData()
+    var
+        OutgoingTransaction: Record ibsOutgoingTransaction;
+        InStream: InStream;
+        Data: Text;
+    begin
+        OutgoingTransaction.SetCurrentKey(SystemCreatedAt);
+        if not OutgoingTransaction.FindLast() then
+            Message('No transaction found!');
+        OutgoingTransaction.CalcFields(Data);
+        OutgoingTransaction.Data.CreateInStream(InStream);
+        InStream.ReadText(Data);
+        Message(Data);
+    end;
+}
